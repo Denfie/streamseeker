@@ -1,6 +1,6 @@
 [tool.streamseeker]
 name = "streamseeker"
-version = "0.0.1.dev0"
+version = "2024.0.2"
 authors = [
   { name="Dennis Fiedler", email="dennis.fiedler@uniprank.com" },
 ]
@@ -19,7 +19,7 @@ Issues = "https://github.com/uniprank/streamseeker/issues"
 
 [tool.poetry]
 name = "streamseeker"
-version = "0.1.0"
+version = "0.1.2"
 description = "Helping package to download files from different streaming platforms"
 authors = ["Dennis Fiedler <dennis.fiedler@uniprank.com>"]
 license = "MIT"

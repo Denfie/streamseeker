@@ -24,57 +24,6 @@ class DownloadCommand(Command):
 
     description = "Start interactive mode to download a show."
 
-    # arguments: ClassVar[list[Argument]] = [
-    #     argument("name", "The packages to add.", multiple=True)
-    # ]
-    options: ClassVar[list[Option]] = [
-        option(
-            "dev",
-            "D",
-            "Add as a development dependency. (shortcut for '-G dev')",
-        ),
-        option("editable", "e", "Add vcs/path dependencies as editable."),
-        option(
-            "extras",
-            "E",
-            "Extras to activate for the dependency.",
-            flag=False,
-            multiple=True,
-        ),
-        option(
-            "optional",
-            None,
-            "Add as an optional dependency to an extra.",
-            flag=False,
-        ),
-        option(
-            "python",
-            None,
-            "Python version for which the dependency must be installed.",
-            flag=False,
-        ),
-        option(
-            "platform",
-            None,
-            "Platforms for which the dependency must be installed.",
-            flag=False,
-        ),
-        option(
-            "source",
-            None,
-            "Name of the source to use to install the package.",
-            flag=False,
-        ),
-        option("allow-prereleases", None, "Accept prereleases."),
-        option(
-            "dry-run",
-            None,
-            "Output the operations but do not execute anything (implicitly enables"
-            " --verbose).",
-        ),
-        option("lock", None, "Do not perform operations (only update the lockfile)."),
-    ]
-
     def handle(self) -> int:
         from streamseeker.utils._compat import metadata
 

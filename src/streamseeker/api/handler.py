@@ -97,6 +97,8 @@ class StreamseekerHandler(BaseClass):
             episode = 0
             threads.extend(sub_threads)
 
+        return threads
+
     def _season_download(self, stream: StreamBase, preferred_provider: str, name: str, language: str, type:str, season:int, episode: int=0):
         match type:
             case "staffel":
