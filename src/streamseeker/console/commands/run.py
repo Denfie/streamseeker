@@ -121,7 +121,7 @@ The add command adds required packages to your <comment>pyproject.toml</> and in
                 "Download a show",
                 # "Search a show",
                 "About us",
-                "Quit",
+                "-- Quit --",
             ];
 
         search_type = self.choice(
@@ -140,7 +140,7 @@ The add command adds required packages to your <comment>pyproject.toml</> and in
                 subprocess.call(['python', '-m', 'streamseeker', 'download'])
             case "About us":
                 subprocess.call(['python', '-m', 'streamseeker', 'about'])
-            case "Quit":
+            case "-- Quit --":
                 return 0
             case _:
                 self.line("Invalid choice")

@@ -187,7 +187,7 @@ Please don't close this terminal window until it's done.
         _list: list[str] = []
         for stream in streams:
             _list.append(stream.get_title())
-        _list.append("Quit")
+        _list.append("-- Quit --")
 
         choice = self.choice(
             "Choose a streaming site:",
@@ -197,7 +197,7 @@ Please don't close this terminal window until it's done.
         )
         self.line("")
 
-        if(choice == "Quit"):
+        if(choice == "-- Quit --"):
             return None
         
         # Find stream from choice
@@ -224,8 +224,8 @@ Please don't close this terminal window until it's done.
         _list: list[str] = []
         for _show in results:
             _list.append(_show.get('name'))
-        _list.append("--Retry--")
-        _list.append("Quit")
+        _list.append("-- Retry search --")
+        _list.append("-- Quit --")
 
         choice = self.choice(
             "Choose a show:",
@@ -235,10 +235,10 @@ Please don't close this terminal window until it's done.
         )
         self.line("")
 
-        if choice == "Quit":
+        if choice == "-- Quit --":
             return None
         
-        if choice == "--Retry--":
+        if choice == "-- Retry search --":
             return self.ask_show(seek_handler, show)
 
         # Find stream from choice
@@ -263,7 +263,7 @@ Please don't close this terminal window until it's done.
         )
         self.line("")
 
-        if(choice == "Quit"):
+        if(choice == "-- Quit --"):
             return None
         
         return choice
@@ -272,7 +272,7 @@ Please don't close this terminal window until it's done.
         _list: list[str] = []
         for language in languages.values():
             _list.append(language.get('title'))
-        _list.append("Quit")
+        _list.append("-- Quit --")
         
         choice = self.choice(
             "Choose a language:",
@@ -282,7 +282,7 @@ Please don't close this terminal window until it's done.
         )
         self.line("")
 
-        if(choice == "Quit"):
+        if(choice == "-- Quit --"):
             return None
         
         for language_key in languages.keys():
@@ -296,7 +296,7 @@ Please don't close this terminal window until it's done.
         _list: list[str] = []
         for provider in providers.values():
             _list.append(provider.get('title'))
-        _list.append("Quit")
+        _list.append("-- Quit --")
         
         choice = self.choice(
             "Choose a language:",
@@ -306,7 +306,7 @@ Please don't close this terminal window until it's done.
         )
         self.line("")
 
-        if(choice == "Quit"):
+        if(choice == "-- Quit --"):
             return None
         
         for provider_key in providers.keys():
@@ -319,13 +319,13 @@ Please don't close this terminal window until it's done.
     def ask_download_mode(self) -> str:
         choice = self.choice(
             "Choose a download mode:",
-            ["All after", "Only one", "Quit"],
+            ["All after", "Only one", "-- Quit --"],
             attempts=3,
             default=2,
         )
         self.line("")
 
-        if(choice == "Quit"):
+        if(choice == "-- Quit --"):
             return None
         
         return choice
@@ -339,7 +339,7 @@ Please don't close this terminal window until it's done.
         )
         self.line("")
 
-        if(choice == "Quit"):
+        if(choice == "-- Quit --"):
             return None
         
         return choice

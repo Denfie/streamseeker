@@ -54,12 +54,14 @@ class AniworldtoStream(StreamBase):
             episodes = self.search_episodes(name, type, season)
             episode = episodes[0]
 
+        providers = self.search_providers(name, type, season, episode)
+        languages = self.seach_languages(name, type, season, episode)
         dict = {
             "types": types,
             "movies": movies,
             "series": series,
-            "providers": self.search_providers(name, type, season, episode),
-            "languages": self.seach_languages(name, type, season, episode)
+            "providers": providers,
+            "languages": languages
         }
         return dict
     
@@ -125,7 +127,7 @@ class AniworldtoStream(StreamBase):
         for provider_key in providers.keys():
             provider = providers.get(provider_key)
 
-            self.line(f"<info>Trying {provider.get('title')}</info>")
+            # self.line(f"<info>Trying {provider.get('title')}</info>")
 
             try:
                 language_key = languages.get(language).get("key")
@@ -186,7 +188,10 @@ class AniworldtoStream(StreamBase):
     # type: type of the anime [filme, staffel] (default=staffel)
     def search_seasons(self, name, type="staffel"):
         url = self.build_url(name)
-        url = f"{url}/filme"
+
+        url = f"{url}"
+        if type == "filme":
+            url = f"{url}/filme"
 
         request = self.request(url)
         request_handler = RequestHandler()
@@ -202,7 +207,7 @@ class AniworldtoStream(StreamBase):
             
         return_array = []
         for element in soup.findAll('a'):
-            search = pattern.search(element.get("href"))
+            search = pattern.search(element.get("href", ""))
             if search is None:
                 continue
             found_name = search.group('name').lower()
@@ -239,7 +244,7 @@ class AniworldtoStream(StreamBase):
         check_array = []
         pattern = re.compile(r"Hoster (?P<provider>.*)", re.M)
         for element in soup.findAll('i'):
-            title = str(element.get("title"))
+            title = str(element.get("title", ""))
             search = pattern.search(title)
             if search is None:
                 continue
@@ -280,7 +285,7 @@ class AniworldtoStream(StreamBase):
             
         return_array = []
         for element in soup.findAll('a'):
-            search = pattern.search(element.get("href"))
+            search = pattern.search(element.get("href", ""))
             if search is None:
                 continue
 
