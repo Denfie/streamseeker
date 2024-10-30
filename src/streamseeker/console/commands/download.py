@@ -331,11 +331,17 @@ Please don't close this terminal window until it's done.
         return choice
 
     def ask_number(self, label:str, list: Collection[int]) -> int:
+        _list = list.copy()
+        _list.insert(0, "-- Quit --")
+
+        if len(_list) == 0:
+            return None
+
         choice = self.choice(
             label,
-            list,
+            _list,
             attempts=3,
-            default=len(list) - 1,
+            default=0,
         )
         self.line("")
 

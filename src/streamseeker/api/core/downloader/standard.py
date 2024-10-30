@@ -71,6 +71,7 @@ class DownloaderStandard:
 
     def _download_file(self, url: str, path: str):
         file_name = os.path.basename(path)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         with self.session.get(url, stream=True) as response:
             response.raise_for_status()
 
@@ -82,6 +83,6 @@ class DownloaderStandard:
 
             pbar.close()
             if os.path.getsize(path) >= int(response.headers.get("Content-Length", 0)):
-                logger.success(f"Finished download of {path}.")
+                logger.debug(f"Finished download of {path}.")
             else:
                 logger.error(f"Filesize doesn't match {os.path.getsize(path)} != {response.headers.get("Content-Length", 0)}.")

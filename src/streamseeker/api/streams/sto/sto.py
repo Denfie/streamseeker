@@ -127,7 +127,7 @@ class StoStream(StreamBase):
         for provider_key in providers.keys():
             provider = providers.get(provider_key)
 
-            self.line(f"<info>Trying {provider.get('title')}</info>")
+            # self.line(f"<info>Trying {provider.get('title')}</info>")
 
             try:
                 language_key = languages.get(language).get("key")
@@ -143,7 +143,7 @@ class StoStream(StreamBase):
             try:
                 provider_class = self._provider_factory.get(provider_key)
                 provider_class.set_config(self.config)
-                self.line(f"<fg=red>Provider {provider.get('title')} - File {output_file} added to queue.</>")
+                # self.line(f"<fg=red>Provider {provider.get('title')} - File {output_file} added to queue.</>")
                 return provider_class.download(redirect_url, output_file)
             except ProviderError:
                 self.line(f"<fg=yellow>Provider '{provider.get('title')}' failed. Try next provider in list.</>")  

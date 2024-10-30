@@ -35,7 +35,7 @@ class VoeProvider(ProviderBase):
                         return cache_url
         except Exception as e:
             logger.error(f"ERROR: {e}")
-            logger.info("Trying again...")
+            logger.debug("Trying again...")
             if self.cache_attemps < 5:
                 self.cache_attemps += 1
                 return self.get_download_url(url)

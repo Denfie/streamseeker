@@ -17,10 +17,11 @@ class StreamseekerHandler(BaseClass):
         self.config.update({"preferred_provider": config.get("preferred_provider", "voe")})
         self.config.update({"output_folder": config.get("output_folder", "downloads")})
         self.config.update({"output_folder_year": config.get("output_folder_year", False)})
-        self.config.update({"ddos_counter": config.get("ddos_counter", 0)})
         self.config.update({"ddos_limit": config.get("ddos_limit", 5)})
         self.config.update({"ddos_timer": config.get("ddos_timer", 60)})
         self.config.update({"overwrite": config.get("overwrite", False)})
+
+        self.ddos_counter = 0
 
         # example
         # stream = self._streams.get("aniworldto")
@@ -91,15 +92,15 @@ class StreamseekerHandler(BaseClass):
             seasons = [e for e in seasons if e >= season]
         
         threads = []
-        for season in seasons:
-            sub_threads = self._season_download(stream, preferred_provider, name, language, type, season, episode)
+        for _season in seasons:
+            sub_threads = self._season_download(stream, preferred_provider, name, language, type, _season, episode)
             episode = 0
             threads.extend(sub_threads)
 
     def _season_download(self, stream: StreamBase, preferred_provider: str, name: str, language: str, type:str, season:int, episode: int=0):
         match type:
             case "staffel":
-                episodes = stream.search_episodes(name, season)
+                episodes = stream.search_episodes(name, type, season)
                 if episodes is None:
                     return None
             case _:

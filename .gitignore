@@ -24,3 +24,4 @@ logs/
 .venv
 /poetry.toml
 ffmpeg*
+!ffmpeg.py
