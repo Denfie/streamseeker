@@ -1,0 +1,26 @@
+*.pyc
+
+# Packages
+/dist/*
+
+# Unit test / coverage reports
+.coverage
+.pytest_cache
+
+.DS_Store
+.idea/*
+.python-version
+.vscode/*
+
+# Folder / Files
+__pycache__
+downloads/
+logs/
+
+# Documentation
+/docs/site/*
+.mypy_cache
+
+.venv
+/poetry.toml
+ffmpeg*
