@@ -5,7 +5,7 @@ This works with windows, linux and mac.
 Use your preferred command line interface to run the script.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/uniprank/streamseeker/master/assets/streamseeker-logo.png" alt="Streamseeker usage" width="800"/>
+  <img src="https://raw.githubusercontent.com/uniprank/streamseeker/master/assets/usage-v-0-1-2.gif" alt="Streamseeker usage" width="800"/>
 </p>
 
 ## Install and Run:
