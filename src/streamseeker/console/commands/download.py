@@ -133,6 +133,12 @@ Please don't close this terminal window until it's done.
     def ask_stream(self, seek_handler: StreamseekerHandler) -> StreamBase:
         streams = seek_handler.streams()
 
+        if len(streams) == 0:
+            return None
+        
+        if len(streams) == 1:
+            return streams[0]
+
         _list: list[str] = []
         for stream in streams:
             _list.append(stream.get_title())
@@ -203,12 +209,18 @@ Please don't close this terminal window until it's done.
 
         return show
     
-    def ask_show_type(self, types: Collection[str]) -> str:
+    def ask_show_type(self, list: Collection[str]) -> str:
+        if len(list) == 0:
+            return None
+        
+        if len(list) == 1:
+            return list[0]
+        
         choice = self.choice(
             "Choose a show type:",
-            types,
+            list,
             attempts=3,
-            default=len(types) - 1,
+            default=len(list) - 1,
         )
         self.line("")
 
@@ -218,6 +230,12 @@ Please don't close this terminal window until it's done.
         return choice
 
     def ask_language(self, languages: dict) -> str:
+        if len(languages) == 0:
+            return None
+        
+        if len(languages) == 1:
+            return languages[0]
+
         _list: list[str] = []
         for language in languages.values():
             _list.append(language.get('title'))
@@ -242,6 +260,12 @@ Please don't close this terminal window until it's done.
         return None
 
     def ask_provider(self, providers: dict) -> str:
+        if len(providers) == 0:
+            return None
+        
+        if len(providers) == 1:
+            return providers[0]
+        
         _list: list[str] = []
         for provider in providers.values():
             _list.append(provider.get('title'))
@@ -280,11 +304,14 @@ Please don't close this terminal window until it's done.
         return choice
 
     def ask_number(self, label:str, list: Collection[int]) -> int:
+        if len(list) == 0:
+            return None
+        
+        if len(list) == 1:
+            return list[0]
+
         _list = list.copy()
         _list.insert(0, "-- Quit --")
-
-        if len(_list) == 0:
-            return None
 
         choice = self.choice(
             label,
