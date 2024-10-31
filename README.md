@@ -4,7 +4,9 @@ An interactive script to download streams from various platforms.
 This works with windows, linux and mac.
 Use your preferred command line interface to run the script.
 
-![Streamseeker usage](https://raw.githubusercontent.com/uniprank/streamseeker/master/assets/running.gif)
+<p align="center">
+  <img src="https://raw.githubusercontent.com/uniprank/streamseeker/master/assets/streamseeker-logo.png" alt="Streamseeker usage" width="800"/>
+</p>
 
 ## Install and Run:
 
