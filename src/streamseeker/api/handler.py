@@ -2,6 +2,7 @@ import time
 
 from streamseeker.api.core.classes.base_class import BaseClass
 
+from streamseeker.api.core.exceptions import ProviderError, LanguageError, DownloadExistsError
 from streamseeker.api.providers.providers import Providers
 from streamseeker.api.streams.streams import Streams
 from streamseeker.api.streams.stream_base import StreamBase
@@ -70,15 +71,22 @@ class StreamseekerHandler(BaseClass):
         threads = []
         match download_type:
             case "all":
-                threads = self._all_download(stream, preferred_provider, name, language, type, season, episode)
+                _threads = self._all_download(stream, preferred_provider, name, language, type, season, episode)
+                threads.extend(_threads);
             # case "only_season":
             #     self._season_download(stream, preferred_provider, name, language, type, season, episode)
             case "single":
-                downloader = stream.download(name, preferred_provider, language, type, season, episode)
-                downloader.join()
-                return
-                # while downloader.is_alive():
-                #     time.sleep(1)
+                try:
+                    downloader = stream.download(name, preferred_provider, language, type, season, episode)
+                    if downloader is not None:
+                        threads.append(downloader)
+                except ProviderError as e:
+                    self.line(f"<error>{e}</error>")
+                except LanguageError as e:
+                    self.line(f"<error>{e}</error>")
+                except DownloadExistsError as e:
+                    self.line(f"<success>File was downloaded before</success>")
+                    pass
             case _:
                 return None
             
@@ -95,6 +103,9 @@ class StreamseekerHandler(BaseClass):
         for _season in seasons:
             sub_threads = self._season_download(stream, preferred_provider, name, language, type, _season, episode)
             episode = 0
+            if sub_threads is None:
+                continue
+
             threads.extend(sub_threads)
 
         return threads
@@ -119,8 +130,17 @@ class StreamseekerHandler(BaseClass):
                 time.sleep(self.config.get("ddos_timer"))
                 self.ddos_counter = 0
 
-            response = stream.download(name, preferred_provider, language, type, season, episode)
-            if response is None:
+            try:
+                response = stream.download(name, preferred_provider, language, type, season, episode)
+                if response is None:
+                    continue
+            except ProviderError as e:
+                self.line(f"<error>{e}</error>")
+                continue
+            except LanguageError as e:
+                self.line(f"<error>{e}</error>")
+                continue
+            except DownloadExistsError as e:
                 continue
 
             threads.append(response)

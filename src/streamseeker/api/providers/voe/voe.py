@@ -33,12 +33,15 @@ class VoeProvider(ProviderBase):
                     if cache_url and cache_url.startswith("https://"):
                         self.cache_attemps = 0
                         return cache_url
+                    
         except Exception as e:
             logger.error(f"ERROR: {e}")
             logger.debug("Trying again...")
             if self.cache_attemps < 5:
                 self.cache_attemps += 1
                 return self.get_download_url(url)
+        
+        raise CacheUrlError(f"Could not get cache url for {self.title}")
   
     def download(self, url, file_name):
         try:

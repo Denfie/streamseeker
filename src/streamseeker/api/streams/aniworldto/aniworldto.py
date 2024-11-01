@@ -3,9 +3,8 @@ import re
 
 from streamseeker.api.streams.stream_base import StreamBase
 from streamseeker.api.providers.provider_factory import ProviderFactory
-from streamseeker.api.core.exceptions import ProviderError, LanguageError
+from streamseeker.api.core.exceptions import ProviderError, LanguageError, DownloadExistsError
 from streamseeker.api.core.request_handler import RequestHandler
-from streamseeker.api.core.downloader.helper import DownloadHelper
 
 class AniworldtoStream(StreamBase):
     name = "aniworldto"
@@ -84,7 +83,6 @@ class AniworldtoStream(StreamBase):
     # episode: episode of the anime (default=0)
     # rule: rule to download the anime [all, only_season, only_episode] (default=all)
     def download(self, name: str, preferred_provider: str, language: str, type: str, season: int, episode: int=0):
-        helper = DownloadHelper()
         site_url = self.build_url(name)
 
         output_struct = [self.config.get("output_folder"), "anime", name]
@@ -112,6 +110,9 @@ class AniworldtoStream(StreamBase):
 
         output_struct.append(file_name) 
         output_file = os.sep.join(output_struct)
+
+        if self.is_downloaded(output_file):
+            raise DownloadExistsError(f"File {output_file} already exists")
         
         providers = self.search_providers(name, type, season, episode)
 
@@ -137,7 +138,7 @@ class AniworldtoStream(StreamBase):
                 if not redirect_url.startswith("http"):
                     redirect_url = f"{self.urls[0]}{redirect_url}"
             except LanguageError:
-                helper.download_error(f"[{language}::{provider_key}]", url)
+                self.download_error(f"[{language}::{provider_key}]", url)
                 raise LanguageError
                  
             try:
@@ -150,8 +151,8 @@ class AniworldtoStream(StreamBase):
                 continue
         
         self.line(f"<fg=yellow>No provider works for {output_file}.</>") 
-        helper.download_error(f"[{language}::{preferred_provider}]", url)
-        return
+        self.download_error(f"[{language}::{preferred_provider}]", url)
+        raise ProviderError
     
     # Search for the types of the anime
     # name: name of the anime

@@ -16,9 +16,9 @@ from cleo.exceptions import CleoError
 from cleo.formatters.style import Style
 from cleo.io.null_io import NullIO
 
-from streamseeker.__version__ import __version__
 from streamseeker.console.command_loader import CommandLoader
 from streamseeker.api.core.logger import Logger
+from streamseeker.utils._compat import metadata
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -49,6 +49,8 @@ COMMANDS = [
     # "search",
     # "version",
 ]
+
+__version__ = metadata.version("streamseeker")
 
 class Application(BaseApplication):
     def __init__(self) -> None:

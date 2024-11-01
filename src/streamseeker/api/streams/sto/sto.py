@@ -5,7 +5,6 @@ from streamseeker.api.streams.stream_base import StreamBase
 from streamseeker.api.providers.provider_factory import ProviderFactory
 from streamseeker.api.core.exceptions import ProviderError, LanguageError
 from streamseeker.api.core.request_handler import RequestHandler
-from streamseeker.api.core.downloader.helper import DownloadHelper
 
 class StoStream(StreamBase):
     name = "sto"
@@ -84,7 +83,6 @@ class StoStream(StreamBase):
     # episode: episode of the serie (default=0)
     # rule: rule to download the serie [all, only_season, only_episode] (default=all)
     def download(self, name: str, preferred_provider: str, language: str, type: str, season: int, episode: int=0):
-        helper = DownloadHelper()
         site_url = self.build_url(name)
 
         output_struct = [self.config.get("output_folder"), "serie", name]
@@ -137,7 +135,7 @@ class StoStream(StreamBase):
                 if not redirect_url.startswith("http"):
                     redirect_url = f"{self.urls[0]}{redirect_url}"
             except LanguageError:
-                helper.download_error(f"[{language}::{provider_key}]", url)
+                self.download_error(f"[{language}::{provider_key}]", url)
                 raise LanguageError
                  
             try:
@@ -150,7 +148,7 @@ class StoStream(StreamBase):
                 continue
         
         self.line(f"<fg=yellow>No provider works for {output_file}.</>") 
-        helper.download_error(f"[{language}::{preferred_provider}]", url)
+        self.download_error(f"[{language}::{preferred_provider}]", url)
         return
     
     # Search for the types of the serie

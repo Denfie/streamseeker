@@ -9,6 +9,7 @@ from typing import ClassVar
 from cleo.helpers import argument
 from cleo.helpers import option
 
+
 from cleo.commands.command import Command
 
 if TYPE_CHECKING:
@@ -24,7 +25,7 @@ class RunCommand(Command):
 
     def handle(self) -> int:
         from streamseeker.utils._compat import metadata
-
+        __version__ = metadata.version("streamseeker")
 
         self.line(
             f"""\
@@ -32,7 +33,7 @@ class RunCommand(Command):
 ---------------------- Streamseeker - Interactive ----------------------
 ------------------------------------------------------------------------</>
 
-<fg=blue>Version:</> {metadata.version("streamseeker")}
+<fg=blue>Version:</> {__version__}
 """
         )
 

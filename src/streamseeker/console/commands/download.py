@@ -46,25 +46,14 @@ class DownloadCommand(Command):
             return 0
         
         show_type = None
+        if len(show_info.get('types')) == 1:
+            show_type = show_info.get('types')[0]
         if len(show_info.get('types')) > 1:
             show_type = self.ask_show_type(show_info.get('types'))
             
             if show_type is None:
                 return 0
 
-        season = 0
-        episode = 0    
-
-        if show_type in ["movie", "filme"]:
-            label = "Choose a movie:"
-            movies = list(map(lambda x: f"Movie {x}", show_info.get('movies')))
-            season = self.ask_number(label, movies)
-
-            if season is None:
-                return 0
-            
-            season = int(season.replace("Movie ", ""))
-        
         language = self.ask_language(show_info.get('languages'))
 
         if language is None:
@@ -79,6 +68,22 @@ class DownloadCommand(Command):
             download_mode = "all"
         elif download_mode == "Only one":
             download_mode = "single"
+
+        season = 0
+        episode = 0    
+        if show_type in ["movie", "filme"]:
+            label = "Choose a movie:"
+            movies = list(map(lambda x: f"Movie {x}", show_info.get('movies')))
+            season = self.ask_number(label, movies)
+
+            if season is None:
+                return 0
+            
+            season = int(season.replace("Movie ", ""))
+
+            if len(seasons) == 1:
+                self.line(f"{show.get('name')} - movie {season}")
+                self.line("")
         
         if show_type in ["serie", "series", "staffel"]:
             label = "Choose a season:"
@@ -89,6 +94,10 @@ class DownloadCommand(Command):
                 return 0
             
             season = int(season.replace("Season ", ""))
+
+            if len(seasons) == 1:
+                self.line(f"{show.get('name')} - season {season}")
+                self.line("")
             
             episodes = streamseek_handler.search_episodes(stream.get_name(), show.get('link'), show_type, season)
             label = "Choose an episode:"
@@ -99,6 +108,10 @@ class DownloadCommand(Command):
                 return 0
 
             episode = int(episode.replace("Episode ", ""))
+            
+            if len(_episodes) == 1:
+                self.line(f"{show.get('name')} - Episode {episode}")
+                self.line("")
             
         preferred_provider = self.ask_provider(show_info.get('providers'))
 
@@ -272,7 +285,7 @@ Please don't close this terminal window until it's done.
         _list.append("-- Quit --")
         
         choice = self.choice(
-            "Choose a language:",
+            "Choose a download provider:",
             _list,
             attempts=3,
             default=len(_list) - 1,

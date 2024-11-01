@@ -1,10 +1,10 @@
 from streamseeker.api.core.classes.base_class import BaseClass
 
 class ProviderBase(BaseClass):
-    name = None
-    title = None
-    priority = 9999
-    cache_attemps = 0
+    name: str = None
+    title: str = None
+    priority: int = 9999
+    cache_attemps: int = 0
 
     def get_name(self):
         return self.name

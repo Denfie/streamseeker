@@ -1,7 +1,5 @@
 from streamseeker.api.core.classes.base_class import BaseClass
-
-from streamseeker.api.core.logger import Logger
-logger = Logger().setup(__name__)
+from streamseeker.api.core.downloader.helper import DownloadHelper
 
 class StreamBase(BaseClass):
     name = None
@@ -26,6 +24,18 @@ class StreamBase(BaseClass):
             return self.description[language]
         else:
             return f"Error-001"
+        
+    def is_downloaded(self, file_path) -> bool:
+        helper = DownloadHelper()
+        return helper.is_downloaded(file_path)
+    
+    def download_successfull(self, file_path) -> None:
+        helper = DownloadHelper()
+        helper.download_success(file_path)
+    
+    def download_error(self, data, url="") -> None:
+        helper = DownloadHelper()
+        helper.download_error(data, url)
  
     def build_url(self, name):
         raise NotImplementedError("build_url() must be implemented")

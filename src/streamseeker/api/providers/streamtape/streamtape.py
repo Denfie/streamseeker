@@ -1,5 +1,6 @@
+import re
+
 from streamseeker.api.core.exceptions import CacheUrlError
-from streamseeker.api.core.request_handler import RequestHandler
 from streamseeker.api.providers.provider_base import ProviderBase
 
 from streamseeker.api.core.downloader.standard import DownloaderStandard
@@ -7,17 +8,21 @@ from streamseeker.api.core.downloader.standard import DownloaderStandard
 from streamseeker.api.core.logger import Logger
 logger = Logger().setup(__name__)
 
-class VidozaProvider(ProviderBase):
-    name = "vidoza"
-    title = "Vidoza"
-    priority = 20
+class StreamtapeProvider(ProviderBase):
+    name = "streamtape"
+    title = "Streamtape"
+    priority = 40
 
     def get_download_url(self, url):
+        STREAMTAPE_PATTERN = re.compile(r'get_video\?id=[^&\'\s]+&expires=[^&\'\s]+&ip=[^&\'\s]+&token=[^&\'\s]+\'')
         try:
             request = self.request(url)
-            request_handler = RequestHandler()
-            soup = request_handler.soup(request["plain_html"].decode("utf-8"))
-            cache_url = soup.find("source").get("src")
+            html_page = request.get("plain_html").decode("utf-8")
+            
+            cache_link = STREAMTAPE_PATTERN.search(html_page)
+            if cache_link is None:
+                raise Exception("Could not find cache link")
+            cache_link = "https://" + self.name + ".com/" + cache_link.group()[:-1]
         except Exception as e:
             logger.error(f"ERROR: {e}")
             logger.debug("Trying again...")
@@ -27,7 +32,7 @@ class VidozaProvider(ProviderBase):
             raise CacheUrlError(f"Could not get cache url for {self.title}")
 
         self.cache_attemps = 0
-        return cache_url
+        return cache_link
   
     def download(self, url, file_name):
         try:
@@ -40,3 +45,4 @@ class VidozaProvider(ProviderBase):
         self._downloader.start()
 
         return self._downloader
+    

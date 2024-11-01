@@ -37,14 +37,21 @@ class RequestHandler:
         return headers
     
     def get(self, url, headers=None) -> urlopen:
-        if headers is None:
-            headers = self.get_header(url)
+        header_keys = headers.keys() if headers is not None else []
 
-        request = Request(url, headers=headers)
+        _headers = self.get_header(url).copy()
+        _headers_keys = _headers.keys()
+
+        for key in header_keys:
+            if key in _headers_keys:
+                _headers[key] = headers[key]
+
+        request = Request(url, headers=_headers)
         try:
             response = urlopen(request, timeout=100)
             return response
         except URLError as e:
+            logger.error(f"{url}: {_headers}")
             logger.error(f"Error while trying to get the url: {url}")
             logger.error(f"Error: {e}")
             return None
