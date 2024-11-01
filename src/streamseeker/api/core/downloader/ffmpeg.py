@@ -5,6 +5,9 @@ from threading import Thread
 from streamseeker.api.core.classes.base_class import BaseClass
 from streamseeker.api.core.downloader.helper import DownloadHelper
 
+from streamseeker.api.core.logger import Logger
+logger = Logger().instance()
+
 class DownloaderFFmpeg(BaseClass):
     ffmpeg_path = "ffmpeg"
 
@@ -40,23 +43,23 @@ class DownloaderFFmpeg(BaseClass):
             subprocess.run([self.ffmpeg_path, "-version"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             return True
         except FileNotFoundError:
-            self.line("<fg=red>FFmpeg is not installed. Please install FFmpeg and try again. You can download it at https://ffmpeg.org/</>")
+            logger.error("<fg=red>FFmpeg is not installed. Please install FFmpeg and try again. You can download it at https://ffmpeg.org/</>")
             return False
         except subprocess.CalledProcessError:
-            self.line("<fg=red>FFmpeg is not installed. Please install FFmpeg and try again. You can download it at https://ffmpeg.org/</>")
+            logger.error("<fg=red>FFmpeg is not installed. Please install FFmpeg and try again. You can download it at https://ffmpeg.org/</>")
             return False
 
     def _download_stream(self, ffmpeg_path, hls_url, file_name):  
         helper = DownloadHelper()
         try:
-            self.line(f"<fg=yellow>Downloading {file_name}...</>")
+            logger.info(f"<fg=yellow>Downloading {file_name}...</>")
             ffmpeg_cmd = [ffmpeg_path, '-i', hls_url, '-c', 'copy', file_name]
             if platform.system() == "Windows":
                 subprocess.run(ffmpeg_cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             else:
                 subprocess.run(ffmpeg_cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            self.line(f"<fg=green>Finished download of {file_name}.</>")
+            logger.info(f"<fg=green>Finished download of {file_name}.</>")
             helper.download_success(file_name)
         except subprocess.CalledProcessError as e:
-            self.line(f"<fg=red>Server error. Could not download {file_name}. Please try to download it later.</>")
+            logger.error(f"<fg=red>Server error. Could not download {file_name}. Please try to download it later.</>")
             helper.download_error(file_name, hls_url)

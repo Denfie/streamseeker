@@ -6,6 +6,9 @@ from streamseeker.api.providers.provider_factory import ProviderFactory
 from streamseeker.api.core.exceptions import ProviderError, LanguageError, DownloadExistsError
 from streamseeker.api.core.request_handler import RequestHandler
 
+from streamseeker.api.core.logger import Logger
+logger = Logger().instance()
+
 class AniworldtoStream(StreamBase):
     name = "aniworldto"
     urls = ["https://aniworld.to"]
@@ -101,7 +104,7 @@ class AniworldtoStream(StreamBase):
         languages = self.seach_languages(name, type, season, episode)
 
         if languages is not None and languages.get(language) is None:
-            self.line(f"<fg=red>Language {language} is not available for {name} -> {url}</>")
+            logger.error(f"<fg=red>Language {language} is not available for {name} -> {url}</>")
 
         if self.config.get("output_folder_year"):
             year = self._get_year(url)
@@ -117,7 +120,7 @@ class AniworldtoStream(StreamBase):
         providers = self.search_providers(name, type, season, episode)
 
         if preferred_provider not in providers:
-            self.line(f"<fg=red>Provider {preferred_provider} is not available</>")
+            logger.error(f"<fg=red>Provider {preferred_provider} is not available</>")
         else:
             temp_provider = providers.get(preferred_provider)
             providers.pop(preferred_provider)
@@ -127,8 +130,6 @@ class AniworldtoStream(StreamBase):
 
         for provider_key in providers.keys():
             provider = providers.get(provider_key)
-
-            # self.line(f"<info>Trying {provider.get('title')}</info>")
 
             try:
                 language_key = languages.get(language).get("key")
@@ -144,13 +145,12 @@ class AniworldtoStream(StreamBase):
             try:
                 provider_class = self._provider_factory.get(provider_key)
                 provider_class.set_config(self.config)
-                # self.line(f"<fg=red>Provider {provider.get('title')} - File {output_file} added to queue.</>")
                 return provider_class.download(redirect_url, output_file)
             except ProviderError:
-                self.line(f"<fg=yellow>Provider '{provider.get('title')}' failed. Try next provider in list.</>")  
+                logger.error(f"<fg=yellow>Provider '{provider.get('title')}' failed. Try next provider in list.</>")  
                 continue
         
-        self.line(f"<fg=yellow>No provider works for {output_file}.</>") 
+        logger.error(f"<fg=yellow>No provider works for {output_file}.</>") 
         self.download_error(f"[{language}::{preferred_provider}]", url)
         raise ProviderError
     
@@ -385,5 +385,5 @@ class AniworldtoStream(StreamBase):
             year = soup.find("span", {"itemprop": "startDate"}).text
             return year
         except AttributeError:
-            self.line("<fg=red>Could not find year of the show.</>")
+            logger.error("<fg=red>Could not find year of the show.</>")
             return None

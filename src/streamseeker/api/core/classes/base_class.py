@@ -2,9 +2,6 @@ import json
 
 # from cleo.commands.command import Command
 
-from streamseeker.api.core.logger import Logger
-logger = Logger().setup(__name__)
-
 from streamseeker.api.core.helpers import Singleton
 from streamseeker.api.core.request_handler import RequestHandler
 
@@ -62,5 +59,3 @@ class BaseClass(metaclass=Singleton):
     
         return response
     
-    def line(self, message):
-        logger.info(message)

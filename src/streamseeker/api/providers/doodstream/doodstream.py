@@ -11,7 +11,7 @@ from streamseeker.api.providers.provider_base import ProviderBase
 from streamseeker.api.core.downloader.standard import DownloaderStandard
 
 from streamseeker.api.core.logger import Logger
-logger = Logger().setup(__name__)
+logger = Logger().instance()
 
 class DoodstreamProvider(ProviderBase):
     name = "doodstream"
@@ -34,7 +34,6 @@ class DoodstreamProvider(ProviderBase):
                     "Referer": request.get("referer"),
                 })
                 req_body = prefetch_request.get("plain_html").decode("utf-8")
-                self.line(f" Match Token: {req_body}")
                 hash = self._create_doodstream_url_hash()
                 cache_link = f"{req_body}{hash}?token={match_token.group('token')}&expiry={self._current_milli_time()}"
         except Exception as e:

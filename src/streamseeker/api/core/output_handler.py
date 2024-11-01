@@ -1,7 +1,7 @@
 import os
 
 from streamseeker.api.core.logger import Logger
-logger = Logger().setup(__name__)
+logger = Logger().instance()
 
 # read_check = os.access('requirements.txt', os.R_OK)
 # write_check = os.access('requirements.txt', os.W_OK)

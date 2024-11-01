@@ -7,7 +7,7 @@ from streamseeker.api.providers.provider_base import ProviderBase
 from streamseeker.api.core.downloader.ffmpeg import DownloaderFFmpeg  
 
 from streamseeker.api.core.logger import Logger
-logger = Logger().setup(__name__)
+logger = Logger().instance()
 
 class VoeProvider(ProviderBase):
     name = "voe"

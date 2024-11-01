@@ -7,6 +7,8 @@ from streamseeker.api.providers.providers import Providers
 from streamseeker.api.streams.streams import Streams
 from streamseeker.api.streams.stream_base import StreamBase
 
+from streamseeker.api.core.logger import Logger
+logger = Logger().instance()
 
 class StreamseekerHandler(BaseClass):
     def __init__(self, config: dict={}):
@@ -81,11 +83,11 @@ class StreamseekerHandler(BaseClass):
                     if downloader is not None:
                         threads.append(downloader)
                 except ProviderError as e:
-                    self.line(f"<error>{e}</error>")
+                    logger.error(f"<error>{e}</error>")
                 except LanguageError as e:
-                    self.line(f"<error>{e}</error>")
+                    logger.error(f"<error>{e}</error>")
                 except DownloadExistsError as e:
-                    self.line(f"<success>File was downloaded before</success>")
+                    logger.error(f"<success>File was downloaded before</success>")
                     pass
             case _:
                 return None
@@ -126,7 +128,7 @@ class StreamseekerHandler(BaseClass):
         threads = []
         for episode in episodes:
             if self.ddos_counter >= self.config.get("ddos_limit"):
-                self.line(f"<warning>DDOS limit reached. Waiting for {self.config.get('ddos_timer')} seconds.</warning>")
+                logger.warning(f"<warning>DDOS limit reached. Waiting for {self.config.get('ddos_timer')} seconds.</warning>")
                 time.sleep(self.config.get("ddos_timer"))
                 self.ddos_counter = 0
 
@@ -135,10 +137,10 @@ class StreamseekerHandler(BaseClass):
                 if response is None:
                     continue
             except ProviderError as e:
-                self.line(f"<error>{e}</error>")
+                logger.error(f"<error>{e}</error>")
                 continue
             except LanguageError as e:
-                self.line(f"<error>{e}</error>")
+                logger.error(f"<error>{e}</error>")
                 continue
             except DownloadExistsError as e:
                 continue

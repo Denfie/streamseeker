@@ -12,7 +12,7 @@ from tqdm.auto import tqdm
 from streamseeker.api.core.downloader.helper import DownloadHelper
 
 from streamseeker.api.core.logger import Logger
-logger = Logger().setup(__name__)
+logger = Logger().instance()
 
 class DownloaderStandard:
     retries = 3

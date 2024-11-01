@@ -2,7 +2,7 @@ from streamseeker.api.core.helpers import Singleton
 from streamseeker.api.streams.stream_base import StreamBase
 
 from streamseeker.api.core.logger import Logger
-logger = Logger().setup(__name__)
+logger = Logger().instance()
 
 class StreamFactory(metaclass=Singleton):
     _dict = {}

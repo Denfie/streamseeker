@@ -5,7 +5,7 @@ from streamseeker.api.core.helpers import Singleton
 from streamseeker.api.core.output_handler import OutputHandler
 
 from streamseeker.api.core.logger import Logger
-logger = Logger().setup(__name__)
+logger = Logger().instance()
 
 class DownloadHelper(metaclass=Singleton):
     success_log_handler: OutputHandler = None

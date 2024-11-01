@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import urllib.parse
 
 from typing import TYPE_CHECKING
@@ -108,7 +109,7 @@ class DownloadCommand(Command):
                 return 0
 
             episode = int(episode.replace("Episode ", ""))
-            
+
             if len(_episodes) == 1:
                 self.line(f"{show.get('name')} - Episode {episode}")
                 self.line("")
@@ -191,6 +192,7 @@ Please don't close this terminal window until it's done.
         results = seek_handler.search_query(show.get_name(), search_term)
         _list: list[str] = []
         for _show in results:
+            _show['name'] = html.unescape(_show.get('name'))
             _list.append(_show.get('name'))
         _list.append("-- Retry search --")
         _list.append("-- Quit --")

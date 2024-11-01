@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import sys
-# import logging
+import logging
 
 # from streamseeker.streamseeker import Streamseeker
-# from streamseeker.api.core.logger import Logger
+from streamseeker.api.core.logger import Logger
 
 if __name__ == "__main__":
     from streamseeker.console.application import main
+
+    logger = Logger(logging.INFO).instance()
 
     sys.exit(main())
 
