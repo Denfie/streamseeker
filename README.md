@@ -31,8 +31,9 @@ It's pretty simple to use the script. Just follow the instructions on the screen
 
 ## Supported Platforms
 
--   AniWorld
--   Serie Stream
+-   AniWorld (aniworld.to)
+-   Serie Stream (s.to)
+-   MegaKino (megakino.tax)
 
 More platforms will be added soon.
 

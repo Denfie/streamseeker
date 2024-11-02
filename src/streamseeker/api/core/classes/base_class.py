@@ -1,9 +1,10 @@
 import json
 
-# from cleo.commands.command import Command
-
 from streamseeker.api.core.helpers import Singleton
 from streamseeker.api.core.request_handler import RequestHandler
+
+from streamseeker.api.core.logger import Logger
+logger = Logger().instance()
 
 class BaseClass(metaclass=Singleton):
     config = {}
@@ -29,11 +30,12 @@ class BaseClass(metaclass=Singleton):
             if(response is None):
                 return None
             
+            plain_html = response.read()
             dict = {
                 "referer": response.url,
                 "headers": response.headers,
-                "plain_html": response.read(),
-                "html": response.read().decode("utf-8")
+                "plain_html": plain_html,
+                "html": plain_html.decode("utf-8")
             }
             self.set_request(url, dict)
             return dict
@@ -49,13 +51,30 @@ class BaseClass(metaclass=Singleton):
             if(response is None):
                 return None
             
+            plain_html = response.read()
             dict = {
                 "referer": response.url,
                 "headers": response.headers,
-                "json": json.loads(response.read())
+                "json": json.loads(plain_html)
             }
             self.set_request(url, dict)
             return dict
     
         return response
     
+    def post_request(self, url, data, headers=None):
+        request = RequestHandler()
+        response = request.post(url, data, headers)
+
+        if(response is None):
+            return None
+        
+        plain_html = response.read()
+        dict = {
+            "referer": response.url,
+            "headers": response.headers,
+            "plain_html": plain_html,
+            "html": plain_html.decode("utf-8")
+        }
+        self.set_request(url, dict)
+        return dict

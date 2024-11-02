@@ -1,6 +1,8 @@
 import os
 import re
 
+from cleo.commands.command import Command
+
 from streamseeker.api.streams.stream_base import StreamBase
 from streamseeker.api.providers.provider_factory import ProviderFactory
 from streamseeker.api.core.exceptions import ProviderError, LanguageError, DownloadExistsError
@@ -13,8 +15,8 @@ class AniworldtoStream(StreamBase):
     name = "aniworldto"
     urls = ["https://aniworld.to"]
     title = {
-        "de": "Suche nach einem Anime",
-        "en": "Search for an anime"
+        "de": "<fg=magenta>AniWorld.to</>: Suche nach einem Anime",
+        "en": "<fg=magenta>AniWorld.to</>: Search for an anime"
     }
     description = {
         "de": "Wenn du nach einem Anime suchen möchtest, gib bitte den Namen des Animes ein.",
@@ -24,6 +26,14 @@ class AniworldtoStream(StreamBase):
     def __init__(self):
         super().__init__()
         self._provider_factory = ProviderFactory()
+
+    def cli(self, cli: Command, cli_type: str="download"):
+        if cli_type == "download":
+            from streamseeker.api.streams.aniworldto.commands.download import AniworldtoDownloadCommand
+            command = AniworldtoDownloadCommand(cli, self)
+            return command.handle()
+        else:
+            raise ValueError(f"Command {cli_type} is not supported")
 
     # Build the url for the anime
     # name: name of the anime
@@ -145,6 +155,7 @@ class AniworldtoStream(StreamBase):
             try:
                 provider_class = self._provider_factory.get(provider_key)
                 provider_class.set_config(self.config)
+                # logger.info(f"<fg=green>Try provider '{provider.get('title')}' for {output_file}</>")
                 return provider_class.download(redirect_url, output_file)
             except ProviderError:
                 logger.error(f"<fg=yellow>Provider '{provider.get('title')}' failed. Try next provider in list.</>")  

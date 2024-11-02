@@ -21,6 +21,7 @@ class DoodstreamProvider(ProviderBase):
     def get_download_url(self, url):
         DOODSTREAM_PATTERN_URL = re.compile(r"'(?P<url>/pass_md5/[^'.*]*)'")
         DOODSTREAM_PATTERN_TOKEN = re.compile(r"token=(?P<token>[^&.*]*)&")
+        cache_link = None
         try:
             request = self.request(url)
             html_page = request.get("plain_html").decode("utf-8")

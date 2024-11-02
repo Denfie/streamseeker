@@ -2,21 +2,7 @@ from __future__ import annotations
 
 import subprocess
 
-from typing import TYPE_CHECKING
-from typing import Any
-from typing import ClassVar
-
-from cleo.helpers import argument
-from cleo.helpers import option
-
-
 from cleo.commands.command import Command
-
-if TYPE_CHECKING:
-    from collections.abc import Collection
-
-    from cleo.io.inputs.argument import Argument
-    from cleo.io.inputs.option import Option
 
 class RunCommand(Command):
     name = "run"
@@ -38,8 +24,8 @@ class RunCommand(Command):
         )
 
         self.choices: list[str] = [
-                "Download a show",
-                # "Search a show",
+                "Download a movie or show",
+                # "Search a movie or show",
                 "About us",
                 "-- Quit --",
             ];
@@ -53,10 +39,10 @@ class RunCommand(Command):
         self.line("")
 
         match search_type:
-            case "Search for a show":
+            case "Search a movie or show":
                 subprocess.call(['python', '-m', 'streamseeker', 'search'])
                 return 0
-            case "Download a show":
+            case "Download a movie or show":
                 subprocess.call(['python', '-m', 'streamseeker', 'download'])
             case "About us":
                 subprocess.call(['python', '-m', 'streamseeker', 'about'])

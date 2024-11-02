@@ -11,16 +11,16 @@ from streamseeker.api.core.request_handler import RequestHandler
 from streamseeker.api.core.logger import Logger
 logger = Logger().instance()
 
-class StoStream(StreamBase):
-    name = "sto"
-    urls = ["https://s.to"]
+class MegakinotaxStream(StreamBase):
+    name = "megakinotax"
+    urls = ["https://megakino.tax"]
     title = {
-        "de": "<fg=magenta>s.to</>: Suche nach einer TV Serien",
-        "en": "<fg=magenta>s.to</>: Search for a TV series"
+        "de": "<fg=magenta>MegaKino.tax</>: Suche nach einem Kinofilm",
+        "en": "<fg=magenta>MegaKino.tax</>: Search for an cinema movie"
     }
     description = {
-        "de": "Wenn du auf der Suche nach einer Serie bist, gib einfach den Namen ein.",
-        "en": "Try to get the best quality for your series. Just search for the series you want to watch."
+        "de": "Wenn du nach einem Kinofilm suchen möchtest, gib bitte den Namen des Films ein.",
+        "en": "If you want to search for a cinema movie, please enter the name of the movie you want to search for."
     }
 
     def __init__(self):
@@ -29,20 +29,26 @@ class StoStream(StreamBase):
 
     def cli(self, cli: Command, cli_type: str="download"):
         if cli_type == "download":
-            from streamseeker.api.streams.sto.commands.download import StoDownloadCommand
-            command = StoDownloadCommand(cli, self)
+            from streamseeker.api.streams.megakinotax.commands.download import MegakinotaxDownloadCommand
+            command = MegakinotaxDownloadCommand(cli, self)
             return command.handle()
         else:
             raise ValueError(f"Command {cli_type} is not supported")
 
-    # Build the url for the serie
-    # name: name of the serie
-    def build_url(self, name, default_url=0):
-        return f"{self.urls[default_url]}/serie/stream/{name}"
 
-    # Search for the serie
-    # name: name of the serie
+    # Build the url for the movie
+    # name: name of the movie
+    def build_url(self, name, genre, default_url=0):
+        return f"{self.urls[default_url]}/{genre}/{name}"
+
+    # Search for the movie
+    # name: name of the movie
     def search(self, name):
+        return {
+            "types": ['filme'],
+        }
+
+
         types = self.search_types(name)
         movies = []
         series = []
@@ -57,7 +63,7 @@ class StoStream(StreamBase):
             return None
         
         episode = 0
-        if len(series) == 0 and len(movies) > 0:
+        if len(series) == 0:
             type = "filme"
             season = movies[0]
         else:
@@ -78,27 +84,23 @@ class StoStream(StreamBase):
         return dict
     
     def search_query(self, search_term):
-        search_url = f"{self.urls[0]}/ajax/seriesSearch?keyword={search_term}"
+        search_url = f"{self.urls[0]}"
+        request = self.post_request(search_url, {"do": "search", "subaction": "search", "story": search_term})
 
-        request = self.request_json(search_url)
-
-        if request.get('json') is None:
-            return None
-
-        return request.get('json')
+        return request
     
-    # Download the serie
-    # name: name of the serie
-    # preferred_provider: provider of the serie [voe, streamtape, ...]
-    # language: language of the serie
-    # type: type of the serie [filme, staffel]
-    # season: season of the serie
-    # episode: episode of the serie (default=0)
-    # rule: rule to download the serie [all, only_season, only_episode] (default=all)
+    # Download the movie
+    # name: name of the movie
+    # preferred_provider: provider of the movie [voe, streamtape, ...]
+    # language: language of the movie
+    # type: type of the movie [filme, staffel]
+    # season: season of the movie
+    # episode: episode of the movie (default=0)
+    # rule: rule to download the movie [all, only_season, only_episode] (default=all)
     def download(self, name: str, preferred_provider: str, language: str, type: str, season: int, episode: int=0):
         site_url = self.build_url(name)
 
-        output_struct = [self.config.get("output_folder"), "serie", name]
+        output_struct = [self.config.get("output_folder"), "movie", name]
         match type:
             case "filme":
                 url = f"{site_url}/filme/film-{season}"
@@ -162,41 +164,16 @@ class StoStream(StreamBase):
         
         logger.error(f"<fg=yellow>No provider works for {output_file}.</>") 
         self.download_error(f"[{language}::{preferred_provider}]", url)
-        return
+        raise ProviderError
     
-    # Search for the types of the serie
-    # name: name of the serie
+    # Search for the types of the movie
+    # name: name of the movie
     def search_types(self, name):
-        url = self.build_url(name)
+        return ['movie']
 
-        request = self.request(url)
-        request_handler = RequestHandler()
-        soup = request_handler.soup(request['plain_html'])
-
-        return_array = []
-        pattern = re.compile(r"/serie/stream/(?P<name>.*)/(?P<type>.*)", re.M)
-
-        for element in soup.findAll('a'):
-            href = str(element.get("href", ""))
-            search = pattern.search(href)
-            if search is None:
-                continue
-            found_name = search.group('name').lower()
-            found_type = search.group('type').lower()
-            if(found_name == name):
-                if found_type == 'filme':
-                    type = 'filme'
-                else:
-                    type = 'staffel'
-
-                if type not in return_array:
-                    return_array.append(type)
-
-        return return_array
-
-    # Search for the seasons of the serie
-    # name: name of the serie
-    # type: type of the serie [filme, staffel] (default=staffel)
+    # Search for the seasons of the movie
+    # name: name of the movie
+    # type: type of the movie [filme, staffel] (default=staffel)
     def search_seasons(self, name, type="staffel"):
         url = self.build_url(name)
 
@@ -210,31 +187,29 @@ class StoStream(StreamBase):
 
         match type:
             case "filme":
-                pattern = re.compile(r"/serie/stream/(?P<name>.*)/filme/film-(?P<count>\d+)", re.M)
+                pattern = re.compile(r"/movie/stream/(?P<name>.*)/filme/film-(?P<count>\d+)", re.M)
             case "staffel":
-                pattern = re.compile(r"/serie/stream/(?P<name>.*)/staffel-(?P<count>\d+)", re.M)
+                pattern = re.compile(r"/movie/stream/(?P<name>.*)/staffel-(?P<count>\d+)", re.M)
             case _:
                 raise ValueError(f"Type {type} is not supported")
             
         return_array = []
         for element in soup.findAll('a'):
             search = pattern.search(element.get("href", ""))
-
             if search is None:
                 continue
-
             found_name = search.group('name').lower()
             count = int(search.group('count'))
-            if count not in return_array:
+            if found_name == name and count not in return_array:
                 return_array.append(count)
         
         return return_array
     
-    # Search for the providers of the serie
-    # name: name of the serie
-    # type: type of the serie [filme, staffel]
-    # season: season of the serie
-    # episode: episode of the serie (default=0)
+    # Search for the providers of the movie
+    # name: name of the movie
+    # type: type of the movie [filme, staffel]
+    # season: season of the movie
+    # episode: episode of the movie (default=0)
     def search_providers(self, name, type, season, episode=0) -> dict: 
         url = self.build_url(name)
 
@@ -276,10 +251,10 @@ class StoStream(StreamBase):
         dict = {k: v for k, v in sorted(dict.items(), key=lambda item: item[1]['priority'])}
         return dict
     
-    # Search for the episodes of the serie
-    # name: name of the serie
-    # type: type of the serie [filme, staffel]
-    # season: season of the serie
+    # Search for the episodes of the movie
+    # name: name of the movie
+    # type: type of the movie [filme, staffel]
+    # season: season of the movie
     def search_episodes(self, name, type, season):
         url = self.build_url(name)
 
@@ -288,7 +263,7 @@ class StoStream(StreamBase):
                 raise ValueError(f"Type {type} does not have episodes")
             case "staffel":
                 url = f"{url}/staffel-{season}"
-                pattern = re.compile(r"/serie/stream/(?P<name>.*)/staffel-(?P<seasonCount>\d+)/episode-(?P<episodeCount>\d+)", re.M)
+                pattern = re.compile(r"/movie/stream/(?P<name>.*)/staffel-(?P<seasonCount>\d+)/episode-(?P<episodeCount>\d+)", re.M)
             case _:
                 raise ValueError(f"Type {type} is not supported")
         
@@ -312,11 +287,11 @@ class StoStream(StreamBase):
         
         return return_array
 
-    # Search for the languages of the serie
-    # name: name of the serie
-    # type: type of the serie [filme, staffel]
-    # season: season of the serie (default=0)
-    # episode: episode of the serie (default=0)
+    # Search for the languages of the movie
+    # name: name of the movie
+    # type: type of the movie [filme, staffel]
+    # season: season of the movie (default=0)
+    # episode: episode of the movie (default=0)
     def seach_languages(self, name, type, season=0, episode=0) -> dict:
         url = self.build_url(name)
         default_season = 1

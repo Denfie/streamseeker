@@ -25,17 +25,12 @@ class StreamseekerHandler(BaseClass):
         self.config.update({"overwrite": config.get("overwrite", False)})
 
         self.ddos_counter = 0
-
-        # example
-        # stream = self._streams.get("aniworldto")
-        # stream.set_config(self.config)
-        # response = stream.search("naruto")
-        # logger.info(f"Stream response: {response}")
-
-        # self.download("single", "aniworldto", "voe", "naruto", "german", "staffel", 1, 2)
     
     def streams(self):
-        return self._streams.get_all()
+        streams = self._streams.get_all()
+        for stream in streams:
+            stream.set_config(self.config)
+        return streams
     
     def providers(self):
         return self._providers.get_all()
@@ -124,11 +119,11 @@ class StreamseekerHandler(BaseClass):
         if episode > 0:
             # remove all episodes before the given episode
             episodes = [e for e in episodes if e >= episode]
-        
+
         threads = []
         for episode in episodes:
             if self.ddos_counter >= self.config.get("ddos_limit"):
-                logger.warning(f"<warning>DDOS limit reached. Waiting for {self.config.get('ddos_timer')} seconds.</warning>")
+                logger.warning(f"DDOS limit reached. Waiting for <warning>{self.config.get('ddos_timer')}</warning> seconds.")
                 time.sleep(self.config.get("ddos_timer"))
                 self.ddos_counter = 0
 

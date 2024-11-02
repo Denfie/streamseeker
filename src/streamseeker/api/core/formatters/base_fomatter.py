@@ -118,7 +118,6 @@ class BaseFormatter(logging.Formatter):
         )
 
         log_fmt = self.FORMATS.get(record.levelno)
-        # formatter = logging.Formatter(log_fmt, datefmt="%Y-%m-%d %H:%M:%S")
         formatter = logging.Formatter(log_fmt, datefmt="%Y-%m-%dT%T%Z")
         return formatter.format(_record)
 

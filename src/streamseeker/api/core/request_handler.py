@@ -4,7 +4,7 @@ import random
 
 from urllib.request import urlopen, Request
 from urllib.error import URLError
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlencode
 
 from bs4 import BeautifulSoup
 
@@ -68,3 +68,24 @@ class RequestHandler:
             return None
         
         return BeautifulSoup(html, features="html.parser")
+    
+    def post(self, url, data, headers=None):
+        header_keys = headers.keys() if headers is not None else []
+
+        _headers = self.get_header(url).copy()
+        _headers_keys = _headers.keys()
+
+        for key in header_keys:
+            if key in _headers_keys:
+                _headers[key] = headers[key]
+
+        data = urlencode(data).encode()
+        request = Request(url, headers=_headers, data=data)
+        try:
+            response = urlopen(request, timeout=100)
+            return response
+        except URLError as e:
+            logger.error(f"{url}: {_headers}")
+            logger.error(f"Error while trying to post the url: {url}")
+            logger.error(f"Error: {e}")
+            return None

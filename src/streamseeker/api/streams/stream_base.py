@@ -1,3 +1,5 @@
+from cleo.commands.command import Command
+
 from streamseeker.api.core.classes.base_class import BaseClass
 from streamseeker.api.core.downloader.helper import DownloadHelper
 
@@ -49,9 +51,6 @@ class StreamBase(BaseClass):
     def download(self, name: str, preferred_provider: str, language: str, type: str, season: int, episode: int=0):
         raise NotImplementedError("download() must be implemented")
     
-    def search_types(self, name):
-        raise NotImplementedError("search_types() must be implemented")
-    
     def search_seasons(self, name, type=None):
         raise NotImplementedError("search_seasons() must be implemented")
     
@@ -63,3 +62,6 @@ class StreamBase(BaseClass):
     
     def seach_languages(self, name, type, season=0, episode=0) -> dict:
         raise NotImplementedError("search_languages() must be implemented")
+    
+    def cli(self, command: Command, cli_type: str) -> None:
+        raise NotImplementedError("command_handler() must be implemented")

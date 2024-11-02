@@ -21,27 +21,33 @@ def success(self, message, *args, **kwargs):
 logging.Logger.loading = loading
 logging.Logger.success = success
 
-class Logger(metaclass=Singleton):
-    _active = False
+loglevel = logging.INFO
 
-    def __init__(self, level=logging.NOTSET, name: str = "streamseeker") -> None:
+class Logger(metaclass=Singleton):
+
+    def __init__(self, level=logging.INFO, name: str = "streamseeker") -> None:
         self._name = name
-        self._logLevel = level
+        self._initLogLevel = level if not logging.NOTSET else loglevel
         self._active = True
+        self._logger = None
     
     def deactivate(self):
-        self._active = False
-        self._logLevel = logging.CRITICAL
+        self._logger.setLevel(logging.CRITICAL)
 
     def activate(self):
-        self._active = True
-        self._logLevel = logging.INFO
+        self._logger.setLevel(self._initLogLevel)
     
-    def instance(self) -> logging.Logger:    
-        logger = logging.getLogger(self._name)
-        logger.propagate = False
+    def instance(self) -> logging.Logger:   
+        if self._logger:
+            return self._logger
+         
+        self._logger = logging.getLogger(self._name)
+
+        # if not self._logger.hasHandlers():
+        self._logger.propagate = False
         handler = logging.StreamHandler()
         handler.setFormatter(BaseFormatter().setup())
-        logger.addHandler(handler)
-        logger.setLevel(self._logLevel)
-        return logger
+        self._logger.addHandler(handler)
+        self._logger.setLevel(self._initLogLevel)
+
+        return self._logger
