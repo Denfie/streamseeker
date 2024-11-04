@@ -35,11 +35,6 @@ class StoDownloadCommand:
             
             if show_type is None:
                 return 0
-
-        language = self.ask_language(show_info.get('languages'))
-
-        if language is None:
-            return 0
         
         download_mode = self.ask_download_mode()
 
@@ -95,6 +90,14 @@ class StoDownloadCommand:
                 self.cli.line(f"{show.get('name')} - Episode {episode}")
                 self.cli.line("")
             
+                
+        search_details = streamseek_handler.search_details(self.stream.get_name(), show.get('link'), show_type, season, episode)
+         
+        language = self.ask_language(search_details.get('languages'))
+
+        if language is None:
+            return 0
+        
         preferred_provider = self.ask_provider(show_info.get('providers'))
 
         if preferred_provider is None:
@@ -226,11 +229,13 @@ Please don't close this terminal window until it's done.
         return choice
 
     def ask_language(self, languages: dict) -> str:
-        if len(languages) == 0:
+        keys = list(languages.keys())
+
+        if len(keys) == 0:
             return None
         
-        if len(languages) == 1:
-            return languages[0]
+        if len(keys) == 1:
+            return keys[0]
 
         _list: list[str] = []
         for language in languages.values():
@@ -256,11 +261,12 @@ Please don't close this terminal window until it's done.
         return None
 
     def ask_provider(self, providers: dict) -> str:
-        if len(providers) == 0:
+        keys = list(providers.keys())
+        if len(keys) == 0:
             return None
         
-        if len(providers) == 1:
-            return providers[0]
+        if len(keys) == 1:
+            return keys[0]
         
         _list: list[str] = []
         for provider in providers.values():

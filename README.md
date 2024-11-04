@@ -35,6 +35,14 @@ It's pretty simple to use the script. Just follow the instructions on the screen
 -   Serie Stream (s.to)
 -   MegaKino (megakino.tax)
 
+## Supported Providers
+
+-   VOE
+-   Vidoza
+-   Streamtape
+-   Doodstream
+-   SpeedFiles
+
 More platforms will be added soon.
 
 ## Legal protection

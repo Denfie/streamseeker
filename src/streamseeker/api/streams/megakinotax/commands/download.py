@@ -2,6 +2,8 @@ import html
 import urllib.parse
 
 from cleo.commands.command import Command
+
+from streamseeker.api.handler import StreamseekerHandler
 from streamseeker.api.streams.stream_base import StreamBase
 from streamseeker.api.core.request_handler import RequestHandler
 
@@ -11,10 +13,21 @@ class MegakinotaxDownloadCommand:
         self.stream = stream
 
     def handle(self) -> int:
+        streamseek_handler = StreamseekerHandler()
+
         movie = self.ask_movie()
 
         if movie is None:
             return 0
+        
+        streamseek_handler.download(
+            download_type='single', 
+            stream_name=self.stream.get_name(), 
+            preferred_provider='voe', 
+            language='de',
+            name=movie.get('name'), 
+            type='movie',
+            url=movie.get('href'))
         
         return 0
 

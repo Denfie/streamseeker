@@ -40,6 +40,11 @@ class StreamseekerHandler(BaseClass):
         stream.set_config(self.config)
         return stream.search(name)
     
+    def search_details(self, stream_name: str, name: str, type: str, season_movie: int=0, episode: int=0):
+        stream = self._streams.get(stream_name)
+        stream.set_config(self.config)
+        return stream.search_details(name, type, season_movie, episode)
+    
     def search_query(self, stream_name: str, search_term: str):
         stream = self._streams.get(stream_name)
         stream.set_config(self.config)
@@ -58,7 +63,7 @@ class StreamseekerHandler(BaseClass):
     # type: [series, movie, ...] stream specific
     # season: [1, 2, 3, ...] (default: 0) Start from
     # episode [1, 2, 3, ...] (default: 0) Start from
-    def download(self, download_type: str, stream_name: str, preferred_provider: str, name: str, language: str, type: str, season: int=0, episode: int=0):
+    def download(self, download_type: str, stream_name: str, preferred_provider: str, name: str, language: str, type: str, season: int=0, episode: int=0, url: str=None):
         stream = self._streams.get(stream_name)
         stream.set_config(self.config)
 
@@ -74,7 +79,7 @@ class StreamseekerHandler(BaseClass):
             #     self._season_download(stream, preferred_provider, name, language, type, season, episode)
             case "single":
                 try:
-                    downloader = stream.download(name, preferred_provider, language, type, season, episode)
+                    downloader = stream.download(name, preferred_provider, language, type, season, episode, url=url)
                     if downloader is not None:
                         threads.append(downloader)
                 except ProviderError as e:

@@ -48,7 +48,10 @@ class StreamBase(BaseClass):
     def search_query(self, search_term):
         raise NotImplementedError("search_query() must be implemented")
     
-    def download(self, name: str, preferred_provider: str, language: str, type: str, season: int, episode: int=0):
+    def search_details(self, name, type, season_movie, episode):
+        raise NotImplementedError("search_details() must be implemented")
+    
+    def download(self, name: str, preferred_provider: str=None, language: str=None, type: str=None, season: int=None, episode: int=None, url: str=None):
         raise NotImplementedError("download() must be implemented")
     
     def search_seasons(self, name, type=None):

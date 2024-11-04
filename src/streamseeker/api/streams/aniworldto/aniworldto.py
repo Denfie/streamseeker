@@ -87,6 +87,15 @@ class AniworldtoStream(StreamBase):
 
         return request.get('json')
     
+    def search_details(self, name, type, season_movie, episode):
+        providers = self.search_providers(name, type, season_movie, episode)
+        languages = self.seach_languages(name, type, season_movie, episode)
+        dict = {
+            "providers": providers,
+            "languages": languages
+        }
+        return dict
+    
     # Download the anime
     # name: name of the anime
     # preferred_provider: provider of the anime [voe, streamtape, ...]
@@ -95,7 +104,7 @@ class AniworldtoStream(StreamBase):
     # season: season of the anime
     # episode: episode of the anime (default=0)
     # rule: rule to download the anime [all, only_season, only_episode] (default=all)
-    def download(self, name: str, preferred_provider: str, language: str, type: str, season: int, episode: int=0):
+    def download(self, name: str, preferred_provider: str, language: str, type: str, season: int, episode: int=0, url: str=None):
         site_url = self.build_url(name)
 
         output_struct = [self.config.get("output_folder"), "anime", name]
