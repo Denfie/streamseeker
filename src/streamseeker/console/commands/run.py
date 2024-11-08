@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import streamseeker
 import subprocess
 
 from cleo.commands.command import Command
@@ -19,7 +20,7 @@ class RunCommand(Command):
 ---------------------- Streamseeker - Interactive ----------------------
 ------------------------------------------------------------------------</>
 
-<fg=blue>Version:</> {__version__}
+Version: <fg=cyan>{__version__}</>
 """
         )
 

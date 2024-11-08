@@ -2,3 +2,5 @@
 
 # poetry shell --quiet
 python -m streamseeker run
+
+tset

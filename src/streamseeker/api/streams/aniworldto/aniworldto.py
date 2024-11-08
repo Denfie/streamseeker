@@ -5,7 +5,7 @@ from cleo.commands.command import Command
 
 from streamseeker.api.streams.stream_base import StreamBase
 from streamseeker.api.providers.provider_factory import ProviderFactory
-from streamseeker.api.core.exceptions import ProviderError, LanguageError, DownloadExistsError
+from streamseeker.api.core.exceptions import ProviderError, LanguageError, DownloadExistsError, LinkUrlError
 from streamseeker.api.core.request_handler import RequestHandler
 
 from streamseeker.api.core.logger import Logger
@@ -66,14 +66,14 @@ class AniworldtoStream(StreamBase):
             episodes = self.search_episodes(name, type, season)
             episode = episodes[0]
 
-        providers = self.search_providers(name, type, season, episode)
-        languages = self.seach_languages(name, type, season, episode)
+        # providers = self.search_providers(name, type, season, episode)
+        # languages = self.seach_languages(name, type, season, episode)
         dict = {
             "types": types,
             "movies": movies,
             "series": series,
-            "providers": providers,
-            "languages": languages
+            # "providers": providers,
+            # "languages": languages
         }
         return dict
     
@@ -123,7 +123,8 @@ class AniworldtoStream(StreamBase):
         languages = self.seach_languages(name, type, season, episode)
 
         if languages is not None and languages.get(language) is None:
-            logger.error(f"<fg=red>Language {language} is not available for {name} -> {url}</>")
+            self.download_error(f"[{self.name}::{language}::{preferred_provider}::no-link]", site_url)
+            raise LanguageError(f"Language <fg=red>{language}</> is not available for {name} -> <fg=cyan>{url}</>")
 
         if self.config.get("output_folder_year"):
             year = self._get_year(url)
@@ -157,9 +158,9 @@ class AniworldtoStream(StreamBase):
                 # Starts redirect_url not with http
                 if not redirect_url.startswith("http"):
                     redirect_url = f"{self.urls[0]}{redirect_url}"
-            except LanguageError:
-                self.download_error(f"[{language}::{provider_key}]", url)
-                raise LanguageError
+            except LinkUrlError as e:
+                self.download_error(f"[{self.name}::{language}::{provider_key}]", url)
+                raise LinkUrlError(e)
                  
             try:
                 provider_class = self._provider_factory.get(provider_key)
@@ -171,7 +172,7 @@ class AniworldtoStream(StreamBase):
                 continue
         
         logger.error(f"<fg=yellow>No provider works for {output_file}.</>") 
-        self.download_error(f"[{language}::{preferred_provider}]", url)
+        self.download_error(f"[{self.name}::{language}::{preferred_provider}]", url)
         raise ProviderError
     
     # Search for the types of the anime
@@ -386,7 +387,7 @@ class AniworldtoStream(StreamBase):
                 redirect_url = link.find('a').get('href')
                 return redirect_url
             
-        raise LanguageError
+        raise LinkUrlError(f"Could not find a Link for <fg=red>{provider}</> and language {language_key} -> <fg=cyan>{url}</>")
     
     def _get_year(self, url):
         """

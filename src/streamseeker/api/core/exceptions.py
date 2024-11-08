@@ -6,6 +6,10 @@ class ProviderError(Exception):
     def __init__(self, *args: object) -> None:
         super().__init__(*args)
 
+class LinkUrlError(Exception):
+    def __init__(self, *args: object) -> None:
+        super().__init__(*args)
+
 class LanguageError(Exception):
     def __init__(self, *args: object) -> None:
         super().__init__(*args)

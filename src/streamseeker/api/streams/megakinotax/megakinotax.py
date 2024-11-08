@@ -93,6 +93,7 @@ class MegakinotaxStream(StreamBase):
         except ProviderError:
             logger.error(f"<fg=yellow>Provider 'VOE' failed</>")  
 
+        self.download_error(f"[{self.name}::{language}::{preferred_provider}]", request_url)
         raise ProviderError
     
     def _get_redirect_url(self, url):

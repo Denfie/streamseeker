@@ -43,16 +43,16 @@ class DownloaderFFmpeg:
             subprocess.run([self.ffmpeg_path, "-version"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             return True
         except FileNotFoundError:
-            logger.error("<fg=red>FFmpeg is not installed. Please install FFmpeg and try again. You can download it at https://ffmpeg.org/</>")
+            logger.error("<fg=red>FFmpeg is not installed.</> Please install FFmpeg and try again. You can download it at <fg=cyan>https://ffmpeg.org/</>")
             return False
         except subprocess.CalledProcessError:
-            logger.error("<fg=red>FFmpeg is not installed. Please install FFmpeg and try again. You can download it at https://ffmpeg.org/</>")
+            logger.error("<fg=red>FFmpeg is not installed.</> Please install FFmpeg and try again. You can download it at <fg=cyan>https://ffmpeg.org/</>")
             return False
 
     def _download_stream(self, ffmpeg_path, hls_url, file_name):  
         helper = DownloadHelper()
         try:
-            logger.info(f"<fg=yellow>Start</> Downloading file to <fg=magenta>{file_name}</>...")
+            logger.info(f"<fg=yellow>Start</> downloading file to <fg=magenta>{file_name}</>...")
             ffmpeg_cmd = [ffmpeg_path, '-i', hls_url, '-c', 'copy', file_name]
             if platform.system() == "Windows":
                 subprocess.run(ffmpeg_cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)

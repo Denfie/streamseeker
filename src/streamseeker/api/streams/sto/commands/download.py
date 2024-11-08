@@ -58,11 +58,11 @@ class StoDownloadCommand:
             
             season = int(season.replace("Movie ", ""))
 
-            if len(seasons) == 1:
+            if len(movies) == 1:
                 self.cli.line(f"{show.get('name')} - movie {season}")
                 self.cli.line("")
         
-        if show_type in ["serie", "series", "staffel"]:
+        elif show_type in ["serie", "series", "staffel"]:
             label = "Choose a season:"
             seasons = list(map(lambda x: f"Season {x}", show_info.get('series')))
             season = self.ask_number(label, seasons)
@@ -89,8 +89,7 @@ class StoDownloadCommand:
             if len(_episodes) == 1:
                 self.cli.line(f"{show.get('name')} - Episode {episode}")
                 self.cli.line("")
-            
-                
+                      
         search_details = streamseek_handler.search_details(self.stream.get_name(), show.get('link'), show_type, season, episode)
          
         language = self.ask_language(search_details.get('languages'))

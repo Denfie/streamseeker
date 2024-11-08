@@ -62,11 +62,11 @@ class AniworldtoDownloadCommand:
             
             season = int(season.replace("Movie ", ""))
 
-            if len(seasons) == 1:
+            if len(movies) == 1:
                 self.cli.line(f"{show.get('name')} - movie {season}")
                 self.cli.line("")
         
-        if show_type in ["serie", "series", "staffel"]:
+        elif show_type in ["serie", "series", "staffel"]:
             label = "Choose a season:"
             seasons = list(map(lambda x: f"Season {x}", show_info.get('series')))
             season = self.ask_number(label, seasons)

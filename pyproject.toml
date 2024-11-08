@@ -13,6 +13,9 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
+[metadata]
+version = "0.1.4"
+
 [project.urls]
 Homepage = "https://github.com/uniprank/streamseeker"
 Issues = "https://github.com/uniprank/streamseeker/issues"

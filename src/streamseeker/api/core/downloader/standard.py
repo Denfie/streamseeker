@@ -10,6 +10,7 @@ from requests.exceptions import HTTPError
 from tqdm.auto import tqdm
 
 from streamseeker.api.core.downloader.helper import DownloadHelper
+from streamseeker.api.core.exceptions import DownloadError
 
 from streamseeker.api.core.logger import Logger
 logger = Logger().instance()
@@ -67,7 +68,6 @@ class DownloaderStandard:
                     
                 logger.error(f"Server error. Could not download {path}. Please try to download it later.")
                 helper.download_error(path, url)
-                raise
 
     def _download_file(self, url: str, path: str):
         file_name = os.path.basename(path)

@@ -2,7 +2,7 @@ import time
 
 from streamseeker.api.core.classes.base_class import BaseClass
 
-from streamseeker.api.core.exceptions import ProviderError, LanguageError, DownloadExistsError
+from streamseeker.api.core.exceptions import ProviderError, LanguageError, DownloadExistsError, LinkUrlError
 from streamseeker.api.providers.providers import Providers
 from streamseeker.api.streams.streams import Streams
 from streamseeker.api.streams.stream_base import StreamBase
@@ -85,7 +85,9 @@ class StreamseekerHandler(BaseClass):
                 except ProviderError as e:
                     logger.error(f"<error>{e}</error>")
                 except LanguageError as e:
-                    logger.error(f"<error>{e}</error>")
+                    logger.error(f"{e}")
+                except LinkUrlError as e:
+                    logger.error(f"{e}")
                 except DownloadExistsError as e:
                     logger.error(f"<success>File was downloaded before</success>")
                     pass
@@ -140,7 +142,10 @@ class StreamseekerHandler(BaseClass):
                 logger.error(f"<error>{e}</error>")
                 continue
             except LanguageError as e:
-                logger.error(f"<error>{e}</error>")
+                logger.error(f"{e}")
+                continue
+            except LinkUrlError as e:
+                logger.error(f"{e}")
                 continue
             except DownloadExistsError as e:
                 continue
