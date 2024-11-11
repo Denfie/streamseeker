@@ -13,6 +13,7 @@ class RunCommand(Command):
     def handle(self) -> int:
         from streamseeker.utils._compat import metadata
         __version__ = metadata.version("streamseeker")
+        __version__ = "0.1.5"
 
         self.line(
             f"""\

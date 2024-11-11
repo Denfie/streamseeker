@@ -26,4 +26,5 @@ tmp_frames/
 .venv
 /poetry.toml
 ffmpeg*
+realesrgan*
 !ffmpeg.py

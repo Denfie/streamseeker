@@ -77,7 +77,7 @@ class DownloaderStandard:
 
             pbar = tqdm(desc=file_name, colour="green", total=int(response.headers.get("Content-Length", 0)), unit="B", unit_scale=True, unit_divisor=1024)
             with open(path, "wb") as file:
-                for chunk in response.iter_content(chunk_size=1024):
+                for chunk in response.iter_content(chunk_size=4096):
                     file.write(chunk)
                     pbar.update(len(chunk))
 

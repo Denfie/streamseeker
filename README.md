@@ -5,7 +5,7 @@ This works with windows, linux and mac.
 Use your preferred command line interface to run the script.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/uniprank/streamseeker/master/assets/usage-v-0-1-2.gif" alt="Streamseeker usage" width="800"/>
+  <img src="https://raw.githubusercontent.com/uniprank/streamseeker/master/assets/usage-v-0-1-5.gif" alt="Streamseeker usage" width="800"/>
 </p>
 
 ## Install and Run
@@ -17,7 +17,7 @@ Use your preferred command line interface to run the script.
 -   Run the following commands:
     -   `poetry install`
     -   `poetry shell` # to activate the virtual environment
-    -   `python -m streamseeker` # to run the script
+    -   `python -m streamseeker run` # to run the script
 
 ## How to use the script
 
