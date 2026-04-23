@@ -1,34 +1,29 @@
 from __future__ import annotations
 
+import atexit
 import sys
 import logging
 
-# from streamseeker.streamseeker import Streamseeker
 from streamseeker.api.core.logger import Logger
+
+
+def _cleanup_terminal() -> None:
+    """Ensure terminal is in a usable state on exit."""
+    try:
+        sys.stderr.write("\033[?25h\033[0m")  # Show cursor, reset attributes
+        sys.stderr.flush()
+    except Exception:
+        pass
+
 
 if __name__ == "__main__":
     from streamseeker.console.application import main
 
-    logger = Logger(logging.INFO).instance()
+    atexit.register(_cleanup_terminal)
+    logger = Logger(logging.DEBUG).instance()
 
-    sys.exit(main())
-
-    # loggerClass = Logger()
-    # loggerClass.activate()
-    # loggerClass.log_level(logging.INFO)
-    # logger = loggerClass.setup(__name__)
-    # try:
-    #     if __name__ == "__main__":
-
-    # except KeyboardInterrupt:
-    #     logger.warning("----------------------------------------------------------")
-    #     logger.warning("                  Stream Download Helper                  ")
-    #     logger.warning("----------------------------------------------------------")
-    #     logger.warning("Downloads may still be running. Please don't close this")
-    #     logger.warning("terminal window until it's done.")
-    #     logger.warning("...Running in background...")
-
-    # except Exception as e:
-    #     logger.error("----------------------------------------------------------")
-    #     logger.error(f"Exception: {e}")
-    #     logger.error("----------------------------------------------------------")
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        _cleanup_terminal()
+        sys.exit(0)

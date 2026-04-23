@@ -18,7 +18,7 @@ from cleo.io.null_io import NullIO
 
 from streamseeker.console.command_loader import CommandLoader
 from streamseeker.api.core.logger import Logger
-from streamseeker.utils._compat import metadata
+from streamseeker.utils._compat import get_version
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -46,15 +46,17 @@ COMMANDS = [
     "about",
     "run",
     "download",
+    "retry",
     # "search",
     # "version",
 ]
 
-__version__ = metadata.version("streamseeker")
+__version__ = get_version()
 
 class Application(BaseApplication):
     def __init__(self) -> None:
         super().__init__("streamseeker", __version__)
+        self._default_command = "run"
 
         self._streamseeker: Streamseeker | None = None
         self._io: IO | None = None

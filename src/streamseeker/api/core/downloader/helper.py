@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timezone 
+from datetime import datetime, timezone
 
 from streamseeker.api.core.helpers import Singleton
 from streamseeker.api.core.output_handler import OutputHandler
@@ -24,7 +24,11 @@ class DownloadHelper(metaclass=Singleton):
 
     def download_success(self, data) -> None:
         utcTime = datetime.now(timezone.utc)
-        log_message = f"[{utcTime.astimezone().isoformat()}] {data}"
+        try:
+            file_size = os.path.getsize(data)
+        except OSError:
+            file_size = 0
+        log_message = f"[{utcTime.astimezone().isoformat()}] {data} :: size={file_size}"
 
         self.success_lines.append(log_message)
         self.success_log_handler.write_line(log_message)
@@ -38,23 +42,36 @@ class DownloadHelper(metaclass=Singleton):
         self.error_log_handler.write_line(log_message)
 
     def is_downloaded(self, file_path) -> bool:
-        file_exists = os.path.isfile(file_path)
+        if not os.path.isfile(file_path):
+            return False
 
-        found = False
+        # Check success log for matching entry with size
         for line in self.success_lines:
-            if line.find(file_path) != -1:
-                found = True
-                break
+            if file_path in line:
+                # Extract logged size if available
+                logged_size = self._parse_size_from_log(line)
+                if logged_size is not None and logged_size > 0:
+                    actual_size = os.path.getsize(file_path)
+                    if actual_size < logged_size:
+                        # File is incomplete
+                        return False
+                return True
 
-        if file_exists and not found:
-            self.download_success(file_path)
-            return True
+        # File exists but not in success log — check if it looks complete
+        # (no reference size available, so we can't verify — treat as not downloaded)
+        return False
 
-        return found
-    
+    def _parse_size_from_log(self, line: str) -> int | None:
+        """Extract size= value from a success log line."""
+        try:
+            if ":: size=" in line:
+                return int(line.split(":: size=")[-1].strip())
+        except (ValueError, IndexError):
+            pass
+        return None
+
     def _remove_from_error_log(self, data) -> None:
         readlines = self.error_log_handler.read_lines()
-        for line in readlines:
-            if line.find(data) != -1:
-                readlines.remove(line)
-        self.error_log_handler.write_lines(readlines, mode='w')
+        filtered = [line for line in readlines if line.find(data) == -1]
+        if len(filtered) != len(readlines):
+            self.error_log_handler.write_lines(filtered, mode='w')

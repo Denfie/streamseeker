@@ -16,7 +16,7 @@ class MegakinotaxStream(StreamBase):
     urls = ["https://megakino.tax"]
     title = {
         "de": "<fg=magenta>MegaKino.tax</>: Suche nach einem Kinofilm",
-        "en": "<fg=magenta>MegaKino.tax</>: Search for an cinema movie"
+        "en": "<fg=magenta>MegaKino.tax</>: Search for a cinema movie"
     }
     description = {
         "de": "Wenn du nach einem Kinofilm suchen möchtest, gib bitte den Namen des Films ein.",
@@ -70,7 +70,13 @@ class MegakinotaxStream(StreamBase):
             }
         }
         return dict
-    
+
+    def build_file_path(self, name: str, type: str, season: int, episode: int, language: str) -> str:
+        output_struct = [self.config.get("output_folder"), "movies", "megakinotax"]
+        file_name = f"{name}-movie-{language}.mp4"
+        output_struct.append(file_name)
+        return os.sep.join(output_struct)
+
     # Download the movie
     # name: name of the movie
     # preferred_provider: provider of the movie [voe, streamtape, ...]

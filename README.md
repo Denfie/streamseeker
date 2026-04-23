@@ -18,6 +18,7 @@ Use your preferred command line interface to run the script.
     -   `poetry install`
     -   `poetry shell` # to activate the virtual environment
     -   `python -m streamseeker run` # to run the script
+    -   `Seirei Gensouki: Spirit Chronicles` # to activate the virtual environment
 
 ## How to use the script
 

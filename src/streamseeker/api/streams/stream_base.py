@@ -53,7 +53,10 @@ class StreamBase(BaseClass):
     
     def download(self, name: str, preferred_provider: str=None, language: str=None, type: str=None, season: int=None, episode: int=None, url: str=None):
         raise NotImplementedError("download() must be implemented")
-    
+
+    def build_file_path(self, name: str, type: str, season: int, episode: int, language: str) -> str:
+        raise NotImplementedError("build_file_path() must be implemented")
+
     def search_seasons(self, name, type=None):
         raise NotImplementedError("search_seasons() must be implemented")
     

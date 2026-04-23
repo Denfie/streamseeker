@@ -1,9 +1,12 @@
 import html
+import os
 import urllib.parse
 
 from cleo.commands.command import Command
 
 from streamseeker.api.handler import StreamseekerHandler
+from streamseeker.api.core.downloader.helper import DownloadHelper
+from streamseeker.api.core.downloader.manager import DownloadManager
 from streamseeker.api.streams.stream_base import StreamBase
 
 from streamseeker.api.core.logger import Logger
@@ -19,13 +22,18 @@ class AniworldtoDownloadCommand:
         from streamseeker.utils._compat import metadata
 
         streamseek_handler = StreamseekerHandler()
-        
+
         show = self.ask_show(streamseek_handler, self.stream)
 
         if show is None:
             return 0
-        
-        show_info = streamseek_handler.search(self.stream.get_name(), show.get('link'))
+
+        try:
+            show_info = streamseek_handler.search(self.stream.get_name(), show.get('link'))
+        except Exception as e:
+            logger.error(f"Connection error: {e}")
+            self.cli.line("<error>Could not connect to the server. Please try again later.</error>")
+            return 0
 
         if show_info is None:
             self.cli.line("Can't get further information about show.")
@@ -40,94 +48,124 @@ class AniworldtoDownloadCommand:
             if show_type is None:
                 return 0
         
-        download_mode = self.ask_download_mode()
-
-        if download_mode is None:
-            return 0
-        
-        if download_mode == "All after":
-            download_mode = "all"
-        elif download_mode == "Only one":
-            download_mode = "single"
-
         season = 0
-        episode = 0    
+        episode = 0
+        episodes = None
+        download_mode = "single"
+
         if show_type in ["movie", "filme"]:
             label = "Choose a movie:"
             movies = list(map(lambda x: f"Movie {x}", show_info.get('movies')))
-            season = self.ask_number(label, movies)
+            season = self.ask_number(label, movies, show_name=show.get('link'), type_=show_type)
 
             if season is None:
                 return 0
-            
+
             season = int(season.replace("Movie ", ""))
 
             if len(movies) == 1:
                 self.cli.line(f"{show.get('name')} - movie {season}")
                 self.cli.line("")
-        
+
         elif show_type in ["serie", "series", "staffel"]:
+            download_mode = self.ask_download_mode()
+
+            if download_mode is None:
+                return 0
+
+            # Pick season
             label = "Choose a season:"
             seasons = list(map(lambda x: f"Season {x}", show_info.get('series')))
-            season = self.ask_number(label, seasons)
+            season = self.ask_number(label, seasons, show_name=show.get('link'), type_=show_type)
 
             if season is None:
                 return 0
-            
+
             season = int(season.replace("Season ", ""))
 
             if len(seasons) == 1:
                 self.cli.line(f"{show.get('name')} - season {season}")
                 self.cli.line("")
-            
-            episodes = streamseek_handler.search_episodes(self.stream.get_name(), show.get('link'), show_type, season)
-            label = "Choose an episode:"
-            _episodes = list(map(lambda x: f"Episode {x}", episodes))
-            episode = self.ask_number(label, _episodes)
 
-            if episode is None:
-                return 0
+            # Pick episode (not needed for "Full season")
+            if download_mode != "season":
+                try:
+                    episodes = streamseek_handler.search_episodes(self.stream.get_name(), show.get('link'), show_type, season)
+                except Exception as e:
+                    logger.error(f"Connection error: {e}")
+                    self.cli.line("<error>Could not fetch episodes. Please try again later.</error>")
+                    return 0
+                label = "Choose an episode:"
+                _episodes = list(map(lambda x: f"Episode {x}", episodes))
+                episode = self.ask_number(label, _episodes, show_name=show.get('link'), type_=show_type, season=season)
 
-            episode = int(episode.replace("Episode ", ""))
+                if episode is None:
+                    return 0
 
-            if len(_episodes) == 1:
-                self.cli.line(f"{show.get('name')} - Episode {episode}")
-                self.cli.line("")
-        
-        search_details = streamseek_handler.search_details(self.stream.get_name(), show.get('link'), show_type, season, episode)
-         
+                episode = int(episode.replace("Episode ", ""))
+
+                if len(_episodes) == 1:
+                    self.cli.line(f"{show.get('name')} - Episode {episode}")
+                    self.cli.line("")
+            else:
+                episode = 0
+
+        # Get language/provider from first available episode
+        detail_episode = episode if episode > 0 else 1
+        try:
+            search_details = streamseek_handler.search_details(self.stream.get_name(), show.get('link'), show_type, season, detail_episode)
+        except Exception as e:
+            logger.error(f"Connection error: {e}")
+            self.cli.line("<error>Could not fetch details. Please try again later.</error>")
+            return 0
+
         language = self.ask_language(search_details.get('languages'))
+        logger.debug(f"Language: {language}")
 
         if language is None:
             return 0
-        
+
         preferred_provider = self.ask_provider(search_details.get('providers'))
+        logger.debug(f"Provider: {preferred_provider}")
 
         if preferred_provider is None:
             return 0
-        try:
-            streamseek_handler.download(download_mode, self.stream.get_name(), preferred_provider, show.get('link'), language, show_type, season, episode)     
-        except KeyboardInterrupt:
-            self.cli.line(
-f"""\
-----------------------------------------------------------
---------- Downloads may still be running. ----------------
-----------------------------------------------------------
 
-Please don't close this terminal window until it's done.
-"""
-)
+        from streamseeker.api.core.downloader.processor import QueueProcessor
 
-        except Exception as e:self.cli.line(
-f"""\
-----------------------------------------------------------
-Exception: {e}
-----------------------------------------------------------
+        if download_mode == "single":
+            streamseek_handler.enqueue_single(
+                self.stream.get_name(), preferred_provider, show.get('link'),
+                language, show_type, season, episode
+            )
+            self.cli.line("<info>1 download added to queue.</info>")
+        elif download_mode == "season":
+            count = streamseek_handler.enqueue_all(
+                self.stream.get_name(), preferred_provider, show.get('link'),
+                language, show_type, season, 0,
+                seasons_list=[season],
+            )
+            self.cli.line(f"<info>{count} download(s) added to queue.</info>")
+        elif download_mode == "season_from":
+            count = streamseek_handler.enqueue_all(
+                self.stream.get_name(), preferred_provider, show.get('link'),
+                language, show_type, season, episode,
+                seasons_list=[season],
+                episodes_list=episodes,
+            )
+            self.cli.line(f"<info>{count} download(s) added to queue.</info>")
+        elif download_mode == "all":
+            count = streamseek_handler.enqueue_all(
+                self.stream.get_name(), preferred_provider, show.get('link'),
+                language, show_type, season, episode,
+                seasons_list=show_info.get('series') or show_info.get('movies'),
+                episodes_list=episodes,
+            )
+            self.cli.line(f"<info>{count} download(s) added to queue.</info>")
 
-Please don't close this terminal window until it's done.
-"""
-)
-        
+        # Start processor if not already running
+        QueueProcessor().start(config=streamseek_handler.config)
+
         return 0
 
     # Ask for streaming provider
@@ -294,27 +332,121 @@ Please don't close this terminal window until it's done.
         return None
     
     def ask_download_mode(self) -> str:
+        modes = [
+            "Full season",
+            "Season from episode",
+            "All from season onwards",
+            "Only one episode",
+            "-- Quit --",
+        ]
+
         choice = self.cli.choice(
             "Choose a download mode:",
-            ["All after", "Only one", "-- Quit --"],
+            modes,
             attempts=3,
-            default=2,
+            default=len(modes) - 1,
         )
         self.cli.line("")
 
-        if(choice == "-- Quit --"):
+        if choice == "-- Quit --":
             return None
-        
-        return choice
 
-    def ask_number(self, label:str, list: list[int]) -> int:
+        mode_map = {
+            "Full season": "season",
+            "Season from episode": "season_from",
+            "All from season onwards": "all",
+            "Only one episode": "single",
+        }
+        return mode_map.get(choice)
+
+    def _get_episode_status(self, show_name: str, type_: str, season: int, episode: int) -> str:
+        """Check download status for an episode across all languages.
+        Returns: 'completed', 'pending', 'downloading', 'failed', 'skipped', 'paused', or None."""
+        # Check queue first (more specific)
+        queue = DownloadManager.get_queue()
+        for item in queue:
+            if (item.get("name") == show_name
+                and item.get("season") == season
+                and item.get("episode") == episode):
+                return item.get("status", "pending")
+
+        # Check success log — match by show name + season + episode pattern
+        helper = DownloadHelper()
+        pattern = f"{show_name}-s{season}e{episode}-"
+        if type_ == "filme":
+            pattern = f"{show_name}-movie-{season}-"
+        for line in helper.success_lines:
+            if pattern in line:
+                return "completed"
+
+        return None
+
+    def _get_season_status(self, show_name: str, type_: str, season: int) -> str:
+        """Check download status for an entire season.
+        Returns: 'completed' if all episodes done, 'partial' if some, or None."""
+        helper = DownloadHelper()
+        queue = DownloadManager.get_queue()
+
+        if type_ == "filme":
+            pattern = f"{show_name}-movie-{season}-"
+        else:
+            pattern = f"{show_name}-s{season}e"
+
+        has_success = any(pattern in line for line in helper.success_lines)
+        has_queue = any(
+            item.get("name") == show_name and item.get("season") == season
+            for item in queue
+        )
+
+        if has_success and not has_queue:
+            return "completed"
+        elif has_success or has_queue:
+            return "partial"
+        return None
+
+    def _colorize_item(self, label: str, status: str | None) -> str:
+        match status:
+            case "completed":
+                return f"\u2705 {label}"
+            case "downloading" | "pending":
+                return f"\u23f3 {label}"
+            case "failed":
+                return f"\u274c {label}"
+            case "skipped":
+                return f"\u23ed {label}"
+            case "paused":
+                return f"\u23f8 {label}"
+            case "partial":
+                return f"\u25d0 {label}"
+            case _:
+                return label
+
+    def ask_number(self, label:str, list: list[int], show_name: str = None, type_: str = None, season: int = None) -> int:
         if len(list) == 0:
             return None
-        
+
         if len(list) == 1:
             return list[0]
 
-        _list = list.copy()
+        _list = []
+        for item in list:
+            if show_name:
+                # Determine status for coloring
+                if item.startswith("Episode "):
+                    ep = int(item.replace("Episode ", ""))
+                    status = self._get_episode_status(show_name, type_, season, ep)
+                elif item.startswith("Season "):
+                    s = int(item.replace("Season ", ""))
+                    status = self._get_season_status(show_name, type_, s)
+                elif item.startswith("Movie "):
+                    m = int(item.replace("Movie ", ""))
+                    status = self._get_episode_status(show_name, type_, m, 0)
+                else:
+                    status = None
+                _list.append(self._colorize_item(item, status))
+            else:
+                _list.append(item)
+
         _list.insert(0, "-- Quit --")
 
         choice = self.cli.choice(
@@ -325,7 +457,10 @@ Please don't close this terminal window until it's done.
         )
         self.cli.line("")
 
-        if(choice == "-- Quit --"):
+        if choice == "-- Quit --":
             return None
-        
-        return choice
+
+        # Strip status icons to get the raw value
+        import re as _re
+        clean = _re.sub(r'^[\u2705\u23f3\u274c\u23ed\u23f8\u25d0]\s*', '', choice)
+        return clean

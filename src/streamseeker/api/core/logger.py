@@ -1,6 +1,8 @@
 import logging
 import os
 
+from tqdm.auto import tqdm
+
 from streamseeker.api.core.helpers import Singleton
 from streamseeker.api.core.formatters.base_fomatter import BaseFormatter
 
@@ -23,6 +25,19 @@ logging.Logger.success = success
 
 loglevel = logging.INFO
 
+
+class TqdmLoggingHandler(logging.StreamHandler):
+    """Logging handler that routes output through tqdm.write()
+    so log messages don't collide with active progress bars."""
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            tqdm.write(msg)
+        except Exception:
+            self.handleError(record)
+
+
 class Logger(metaclass=Singleton):
 
     def __init__(self, level=logging.INFO, name: str = "streamseeker") -> None:
@@ -30,22 +45,21 @@ class Logger(metaclass=Singleton):
         self._initLogLevel = level if not logging.NOTSET else loglevel
         self._active = True
         self._logger = None
-    
+
     def deactivate(self):
         self._logger.setLevel(logging.CRITICAL)
 
     def activate(self):
         self._logger.setLevel(self._initLogLevel)
-    
-    def instance(self) -> logging.Logger:   
+
+    def instance(self) -> logging.Logger:
         if self._logger:
             return self._logger
-         
+
         self._logger = logging.getLogger(self._name)
 
-        # if not self._logger.hasHandlers():
         self._logger.propagate = False
-        handler = logging.StreamHandler()
+        handler = TqdmLoggingHandler()
         handler.setFormatter(BaseFormatter().setup())
         self._logger.addHandler(handler)
         self._logger.setLevel(self._initLogLevel)

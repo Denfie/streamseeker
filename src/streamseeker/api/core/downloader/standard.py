@@ -10,6 +10,7 @@ from requests.exceptions import HTTPError
 from tqdm.auto import tqdm
 
 from streamseeker.api.core.downloader.helper import DownloadHelper
+from streamseeker.api.core.downloader.manager import DownloadManager
 from streamseeker.api.core.exceptions import DownloadError
 
 from streamseeker.api.core.logger import Logger
@@ -30,15 +31,17 @@ class DownloaderStandard:
         self.file_name = file_name
         self.parsed_url = urlparse(url)
         self.session = Session()
+        self._manager = DownloadManager()
         if not headers.get("Referer"):
             headers['Referer'] = f"{self.parsed_url.scheme}://{self.parsed_url.netloc}"
 
         logger.debug(f"Headers: {headers}")
         self.session.headers.update(headers)
-    
+
     def start(self):
-        self.thread = Thread(target=self._download, args=(self.url, self.file_name))
+        self.thread = Thread(target=self._download, args=(self.url, self.file_name), daemon=True)
         self.thread.start()
+        self._manager.register_thread(self.thread, os.path.basename(self.file_name))
 
         return self.thread
 
@@ -53,36 +56,64 @@ class DownloaderStandard:
 
     def _download(self, url: str, path: str):
         helper = DownloadHelper()
+        display_name = os.path.basename(path)
         for i in range(self.retries):
             try:
                 self._download_file(url, path)
                 helper.download_success(path)
-                break
+                self._manager.report_success(path)
+                logger.info(f"\u2705 {display_name}")
+                return
             except HTTPError as exc:
                 code = exc.response.status_code
-                
+
                 if code in self.retry_codes:
-                    # retry after 20 seconds
-                    time.sleep(20)
-                    continue
-                    
+                    if i < self.retries - 1:
+                        logger.warning(f"\u26a0\ufe0f  {display_name} \u2014 HTTP {code}, Retry {i + 2}/{self.retries}")
+                        time.sleep(20)
+                        continue
+
                 logger.error(f"Server error. Could not download {path}. Please try to download it later.")
                 helper.download_error(path, url)
+                self._manager.report_failure(path)
+                logger.error(f"\u274c {display_name} \u2014 Download failed (HTTP {code})")
+                return
+            except Exception:
+                pass
+
+        # All retries exhausted
+        helper.download_error(path, url)
+        self._manager.report_failure(path)
+        logger.error(f"\u274c {display_name} \u2014 Download failed after {self.retries} attempts")
 
     def _download_file(self, url: str, path: str):
         file_name = os.path.basename(path)
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with self.session.get(url, stream=True) as response:
-            response.raise_for_status()
+        pos = self._manager.acquire_position()
+        try:
+            with self.session.get(url, stream=True) as response:
+                response.raise_for_status()
+                total = int(response.headers.get("Content-Length", 0))
 
-            pbar = tqdm(desc=file_name, colour="green", total=int(response.headers.get("Content-Length", 0)), unit="B", unit_scale=True, unit_divisor=1024)
-            with open(path, "wb") as file:
-                for chunk in response.iter_content(chunk_size=4096):
-                    file.write(chunk)
-                    pbar.update(len(chunk))
+                from streamseeker.api.core.downloader.manager import _devnull
+                pbar = tqdm(
+                    total=total,
+                    unit="B",
+                    unit_scale=True,
+                    unit_divisor=1024,
+                    file=_devnull,
+                    leave=False,
+                )
+                self._manager.register_bar(pbar, file_name)
+                with open(path, "wb") as file:
+                    for chunk in response.iter_content(chunk_size=4096):
+                        file.write(chunk)
+                        pbar.update(len(chunk))
 
-            pbar.close()
-            if os.path.getsize(path) >= int(response.headers.get("Content-Length", 0)):
-                logger.debug(f"Finished download of {path}.")
-            else:
-                logger.error(f"Filesize doesn't match {os.path.getsize(path)} != {response.headers.get("Content-Length", 0)}.")
+                self._manager.unregister_bar(file_name)
+                pbar.close()
+                if os.path.getsize(path) < total:
+                    content_length = response.headers.get("Content-Length", 0)
+                    raise DownloadError(f"Filesize doesn't match {os.path.getsize(path)} != {content_length}")
+        finally:
+            self._manager.release_position(pos)

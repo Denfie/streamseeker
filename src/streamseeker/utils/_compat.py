@@ -55,10 +55,20 @@ def getencoding() -> str:
         return locale.getencoding()
 
 
+def get_version() -> str:
+    from pathlib import Path
+
+    pyproject_path = Path(__file__).resolve().parents[3] / "pyproject.toml"
+    with open(pyproject_path, "rb") as f:
+        data = tomllib.load(f)
+    return data["tool"]["poetry"]["version"]
+
+
 __all__ = [
     "WINDOWS",
     "decode",
     "encode",
+    "get_version",
     "getencoding",
     "metadata",
     "tomllib",

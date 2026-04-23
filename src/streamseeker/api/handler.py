@@ -1,8 +1,12 @@
+import json
+import os
 import time
+from datetime import datetime, timezone
 
 from streamseeker.api.core.classes.base_class import BaseClass
 
 from streamseeker.api.core.exceptions import ProviderError, LanguageError, DownloadExistsError, LinkUrlError
+from streamseeker.api.core.downloader.manager import DownloadManager
 from streamseeker.api.providers.providers import Providers
 from streamseeker.api.streams.streams import Streams
 from streamseeker.api.streams.stream_base import StreamBase
@@ -11,45 +15,69 @@ from streamseeker.api.core.logger import Logger
 logger = Logger().instance()
 
 class StreamseekerHandler(BaseClass):
+    CONFIG_FILE = "config.json"
+
+    DEFAULTS = {
+        "preferred_provider": "voe",
+        "output_folder": "downloads",
+        "output_folder_year": False,
+        "overwrite": False,
+        "max_concurrent": 2,
+        "max_retries": 3,
+        "ddos_limit": 3,
+        "ddos_timer": 90,
+        "start_delay_min": 5,
+        "start_delay_max": 25,
+    }
+
     def __init__(self, config: dict={}):
         super().__init__()
         self._providers = Providers()
         self._streams = Streams()
-        self.config = config
+        self._manager = DownloadManager()
 
-        self.config.update({"preferred_provider": config.get("preferred_provider", "voe")})
-        self.config.update({"output_folder": config.get("output_folder", "downloads")})
-        self.config.update({"output_folder_year": config.get("output_folder_year", False)})
-        self.config.update({"ddos_limit": config.get("ddos_limit", 5)})
-        self.config.update({"ddos_timer": config.get("ddos_timer", 60)})
-        self.config.update({"overwrite": config.get("overwrite", False)})
+        # Load config: defaults ← config.json ← passed config
+        self.config = dict(self.DEFAULTS)
+        file_config = self._load_config_file()
+        self.config.update(file_config)
+        self.config.update({k: v for k, v in config.items() if v is not None})
+
+    @classmethod
+    def _load_config_file(cls) -> dict:
+        if not os.path.isfile(cls.CONFIG_FILE):
+            return {}
+        try:
+            with open(cls.CONFIG_FILE, "r") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError):
+            return {}
 
         self.ddos_counter = 0
-    
+
     def streams(self):
         streams = self._streams.get_all()
         for stream in streams:
             stream.set_config(self.config)
         return streams
-    
+
     def providers(self):
         return self._providers.get_all()
-    
+
     def search(self, stream_name: str, name: str):
         stream = self._streams.get(stream_name)
         stream.set_config(self.config)
         return stream.search(name)
-    
+
     def search_details(self, stream_name: str, name: str, type: str, season_movie: int=0, episode: int=0):
         stream = self._streams.get(stream_name)
         stream.set_config(self.config)
         return stream.search_details(name, type, season_movie, episode)
-    
+
     def search_query(self, stream_name: str, search_term: str):
         stream = self._streams.get(stream_name)
         stream.set_config(self.config)
         return stream.search_query(search_term)
-    
+
     def search_episodes(self, stream_name: str, name: str, type: str, season: int):
         stream = self._streams.get(stream_name)
         stream.set_config(self.config)
@@ -69,7 +97,7 @@ class StreamseekerHandler(BaseClass):
 
         if stream is None:
             return None
-        
+
         threads = []
         match download_type:
             case "all":
@@ -81,6 +109,7 @@ class StreamseekerHandler(BaseClass):
                 try:
                     downloader = stream.download(name, preferred_provider, language, type, season, episode, url=url)
                     if downloader is not None:
+                        self._register_context(downloader, stream.get_name(), preferred_provider, name, language, type, season, episode)
                         threads.append(downloader)
                 except ProviderError as e:
                     logger.error(f"<error>{e}</error>")
@@ -93,16 +122,16 @@ class StreamseekerHandler(BaseClass):
                     pass
             case _:
                 return None
-            
-        for thread in threads:
-            thread.join()
-    
+
+        # Threads are tracked by DownloadManager via the downloaders
+        pass
+
     def _all_download(self, stream: StreamBase, preferred_provider: str, name: str, language: str, type: str, season: int, episode: int):
         seasons = stream.search_seasons(name, type)
         if season > 0:
             # remove all seasons before the given season
             seasons = [e for e in seasons if e >= season]
-        
+
         threads = []
         for _season in seasons:
             sub_threads = self._season_download(stream, preferred_provider, name, language, type, _season, episode)
@@ -122,7 +151,7 @@ class StreamseekerHandler(BaseClass):
                     return None
             case _:
                 episodes = [0]
-        
+
         if episode > 0:
             # remove all episodes before the given episode
             episodes = [e for e in episodes if e >= episode]
@@ -138,6 +167,7 @@ class StreamseekerHandler(BaseClass):
                 response = stream.download(name, preferred_provider, language, type, season, episode)
                 if response is None:
                     continue
+                self._register_context(response, stream.get_name(), preferred_provider, name, language, type, season, episode)
             except ProviderError as e:
                 logger.error(f"<error>{e}</error>")
                 continue
@@ -153,6 +183,94 @@ class StreamseekerHandler(BaseClass):
             threads.append(response)
 
             self.ddos_counter += 1
-        
+
         return threads
-    
+
+    def _register_context(self, downloader, stream_name: str, provider: str, name: str, language: str, type: str, season: int, episode: int):
+        """Register download context for retry queue and save to persistent queue."""
+        file_name = downloader.file_name
+        context = {
+            "stream_name": stream_name,
+            "provider": provider,
+            "name": name,
+            "language": language,
+            "type": type,
+            "season": season,
+            "episode": episode,
+            "file_name": file_name,
+            "added_at": datetime.now(timezone.utc).astimezone().isoformat(),
+        }
+        self._manager.register_retry_context(file_name, context)
+        self._manager.enqueue(context)
+
+    def enqueue_all(self, stream_name: str, preferred_provider: str, name: str, language: str, type: str, season: int = 0, episode: int = 0, seasons_list: list[int] = None, episodes_list: list[int] = None) -> int:
+        """Enqueue all episodes from the given season/episode onwards. No downloads started.
+
+        seasons_list/episodes_list: pre-fetched data from the wizard to avoid duplicate HTTP requests.
+        """
+        stream = self._streams.get(stream_name)
+        stream.set_config(self.config)
+
+        if seasons_list is None:
+            seasons_list = stream.search_seasons(name, type)
+        if season > 0:
+            seasons_list = [s for s in seasons_list if s >= season]
+
+        count = 0
+        for _season in seasons_list:
+            if type == "staffel":
+                # Use pre-fetched episodes only for the starting season
+                if episodes_list is not None and _season == season:
+                    eps = episodes_list
+                else:
+                    eps = stream.search_episodes(name, type, _season)
+                if eps is None:
+                    continue
+                if episode > 0 and _season == season:
+                    eps = [e for e in eps if e >= episode]
+            else:
+                eps = [_season]
+
+            for _episode in eps:
+                file_path = stream.build_file_path(name, type, _season, _episode, language)
+                item = {
+                    "stream_name": stream_name,
+                    "show_name": name,
+                    "show_url": name,
+                    "preferred_provider": preferred_provider,
+                    "name": name,
+                    "language": language,
+                    "type": type,
+                    "season": _season,
+                    "episode": _episode,
+                    "file_name": file_path,
+                    "added_at": datetime.now(timezone.utc).astimezone().isoformat(),
+                }
+                self._manager.enqueue(item)
+                count += 1
+
+            episode = 0
+
+        return count
+
+    def enqueue_single(self, stream_name: str, preferred_provider: str, name: str, language: str, type: str, season: int = 0, episode: int = 0, url: str = None) -> int:
+        """Enqueue a single download item."""
+        stream = self._streams.get(stream_name)
+        stream.set_config(self.config)
+
+        file_path = stream.build_file_path(name, type, season, episode, language)
+        item = {
+            "stream_name": stream_name,
+            "show_name": name,
+            "show_url": url or name,
+            "preferred_provider": preferred_provider,
+            "name": name,
+            "language": language,
+            "type": type,
+            "season": season,
+            "episode": episode,
+            "file_name": file_path,
+            "added_at": datetime.now(timezone.utc).astimezone().isoformat(),
+        }
+        self._manager.enqueue(item)
+        return 1

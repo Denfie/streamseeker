@@ -55,27 +55,12 @@ class AniworldtoStream(StreamBase):
 
         if len(series) == 0 and len(movies) == 0:
             return None
-        
-        episode = 0
-        if len(series) == 0:
-            type = "filme"
-            season = movies[0]
-        else:
-            type = "staffel"
-            season = series[0]
-            episodes = self.search_episodes(name, type, season)
-            episode = episodes[0]
 
-        # providers = self.search_providers(name, type, season, episode)
-        # languages = self.seach_languages(name, type, season, episode)
-        dict = {
+        return {
             "types": types,
             "movies": movies,
             "series": series,
-            # "providers": providers,
-            # "languages": languages
         }
-        return dict
     
     def search_query(self, search_term):
         search_url = f"{self.urls[0]}/ajax/seriesSearch?keyword={search_term}"
@@ -95,7 +80,21 @@ class AniworldtoStream(StreamBase):
             "languages": languages
         }
         return dict
-    
+
+    def build_file_path(self, name: str, type: str, season: int, episode: int, language: str) -> str:
+        output_struct = [self.config.get("output_folder"), "anime", name]
+        match type:
+            case "filme":
+                file_name = f"{name}-movie-{season}-{language}.mp4"
+                output_struct.append("movies")
+            case "staffel":
+                output_struct.append(f"Season {season}")
+                file_name = f"{name}-s{season}e{episode}-{language}.mp4"
+            case _:
+                raise ValueError(f"Type {type} is not supported")
+        output_struct.append(file_name)
+        return os.sep.join(output_struct)
+
     # Download the anime
     # name: name of the anime
     # preferred_provider: provider of the anime [voe, streamtape, ...]
@@ -273,7 +272,7 @@ class AniworldtoStream(StreamBase):
             provider = search.group('provider').lower()
             if provider not in check_array:
                 try:
-                    provider_obj = self._provider_factory.get(provider)
+                    provider_obj = self._provider_factory.get(provider, source_url=url)
                 except ProviderError:
                     continue
                 dict[provider] = {

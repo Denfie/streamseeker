@@ -1,5 +1,9 @@
+import json
+import os
+from datetime import datetime, timezone
+
 from streamseeker.api.core.helpers import Singleton
-from streamseeker.api.core.exceptions import ProviderError 
+from streamseeker.api.core.exceptions import ProviderError
 from streamseeker.api.providers.provider_base import ProviderBase
 
 from streamseeker.api.core.logger import Logger
@@ -7,18 +11,59 @@ logger = Logger().instance()
 
 class ProviderFactory(metaclass=Singleton):
     _dict = {}
+    UNSUPPORTED_FILE = os.path.join("logs", "unsupported_providers.json")
 
     def __init__(self) -> None:
+        self._unsupported: dict[str, dict] = self._load_unsupported()
         self._import_providers()
 
     def register(self, provider: ProviderBase) -> None:
         self._dict[provider.name.lower()] = provider
 
-    def get(self, name: str) -> ProviderBase:
+    def get(self, name: str, source_url: str = None) -> ProviderBase:
         if name.lower() in self._dict:
             return self._dict[name.lower()]
         else:
+            self._track_unsupported(name.lower(), source_url)
             raise ProviderError(f"Provider {name} is not registered")
+
+    def get_unsupported(self) -> dict[str, dict]:
+        return self._unsupported
+
+    def _track_unsupported(self, name: str, source_url: str = None) -> None:
+        """Track an unsupported provider name with count, URLs, and dates."""
+        now = datetime.now(timezone.utc).astimezone().isoformat()
+        if name in self._unsupported:
+            self._unsupported[name]["count"] += 1
+            self._unsupported[name]["last_seen"] = now
+            # Add URL if not already tracked
+            if source_url:
+                urls = self._unsupported[name].setdefault("urls", [])
+                if source_url not in urls:
+                    urls.append(source_url)
+        else:
+            self._unsupported[name] = {
+                "count": 1,
+                "first_seen": now,
+                "last_seen": now,
+                "urls": [source_url] if source_url else [],
+            }
+            logger.debug(f"New unsupported provider detected: {name}")
+        self._save_unsupported()
+
+    def _load_unsupported(self) -> dict:
+        if not os.path.isfile(self.UNSUPPORTED_FILE):
+            return {}
+        try:
+            with open(self.UNSUPPORTED_FILE, "r") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError):
+            return {}
+
+    def _save_unsupported(self) -> None:
+        os.makedirs(os.path.dirname(self.UNSUPPORTED_FILE), exist_ok=True)
+        with open(self.UNSUPPORTED_FILE, "w") as f:
+            json.dump(self._unsupported, f, indent=2, ensure_ascii=False)
         
     def get_all(self):
         return self._dict.values()

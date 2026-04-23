@@ -7,6 +7,9 @@ from streamseeker.api.handler import StreamseekerHandler
 from streamseeker.api.streams.stream_base import StreamBase
 from streamseeker.api.core.request_handler import RequestHandler
 
+from streamseeker.api.core.logger import Logger
+logger = Logger().instance()
+
 class MegakinotaxDownloadCommand:
     def __init__(self, cli: Command, stream: StreamBase):
         self.cli = cli
@@ -19,16 +22,17 @@ class MegakinotaxDownloadCommand:
 
         if movie is None:
             return 0
-        
-        streamseek_handler.download(
-            download_type='single', 
-            stream_name=self.stream.get_name(), 
-            preferred_provider='voe', 
-            language='de',
-            name=movie.get('name'), 
-            type='movie',
-            url=movie.get('href'))
-        
+
+        from streamseeker.api.core.downloader.processor import QueueProcessor
+
+        streamseek_handler.enqueue_single(
+            self.stream.get_name(), 'voe', movie.get('name'),
+            'de', 'movie', 0, 0, url=movie.get('href')
+        )
+        self.cli.line("<info>1 download added to queue.</info>")
+
+        QueueProcessor().start(config=streamseek_handler.config)
+
         return 0
 
     def ask_movie(self) -> dict:
