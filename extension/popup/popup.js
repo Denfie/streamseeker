@@ -468,16 +468,11 @@
     card.className = "card";
     card.dataset.title = row.title || row.slug || "";
 
-    const url = seriesUrlFor(row);
-    if (url) {
-      card.title = `Auf ${STREAM_LABELS[row.stream] || row.stream} öffnen`;
-      card.addEventListener("click", (ev) => {
-        if (ev.target.closest("button")) return;  // let action buttons handle themselves
-        chrome.tabs.create({ url });
-      });
-    } else {
-      card.style.cursor = "default";
-    }
+    card.title = "Details anzeigen";
+    card.addEventListener("click", (ev) => {
+      if (ev.target.closest("button")) return;  // let action buttons handle themselves
+      showDetailModal(row);
+    });
 
     const poster = document.createElement("div");
     poster.className = "card__poster";
@@ -540,5 +535,135 @@
     return card;
   }
 
-  document.addEventListener("DOMContentLoaded", init);
+  // ----- Detail modal ---------------------------------------------
+
+  async function showDetailModal(row) {
+    const modal = document.querySelector("#ss-detail");
+    const backdrop = document.querySelector("#ss-detail-backdrop");
+    const poster = document.querySelector("#ss-detail-poster");
+    const titleEl = document.querySelector("#ss-detail-title");
+    const metaEl = document.querySelector("#ss-detail-meta");
+    const genresEl = document.querySelector("#ss-detail-genres");
+    const overviewEl = document.querySelector("#ss-detail-overview");
+    const statsEl = document.querySelector("#ss-detail-stats");
+    const actionsEl = document.querySelector("#ss-detail-actions");
+
+    // Initial fast render from index row; enrich with full entry below.
+    poster.style.backgroundImage = `url("${api.posterUrl(row.key)}")`;
+    backdrop.style.backgroundImage = `url("${api.backdropUrl(row.key)}")`;
+    titleEl.textContent = row.title || row.slug || row.key;
+    metaEl.innerHTML = "";
+    genresEl.innerHTML = "";
+    overviewEl.textContent = "Details werden geladen…";
+    statsEl.innerHTML = "";
+    actionsEl.innerHTML = "";
+
+    modal.hidden = false;
+    modal.setAttribute("aria-hidden", "false");
+
+    let entry;
+    try {
+      entry = await api.libraryGet(row.key);
+    } catch (err) {
+      overviewEl.textContent = `Konnte Details nicht laden: ${err.message}`;
+      return;
+    }
+
+    // Pick the richest external block (TMDb > AniList > first)
+    const external = entry.external || {};
+    const preference = ["tmdb", "tvdb", "anilist", "omdb"];
+    let ext = null;
+    for (const name of preference) {
+      if (external[name]) { ext = external[name]; break; }
+    }
+    if (!ext) ext = Object.values(external)[0] || {};
+
+    // Title + pills row
+    titleEl.textContent = entry.title || ext.title || entry.slug || entry.key;
+    const pills = [];
+    const year = entry.year || ext.year;
+    if (year) pills.push(["", `${year}`]);
+    if (ext.fsk) pills.push(["detail__pill--fsk", ext.fsk]);
+    if (ext.rating) pills.push(["detail__pill--rating", `★ ${ext.rating.toFixed(1)}`]);
+    if (entry.favorite) pills.push(["detail__pill--fav", "⭐ Favorit"]);
+    const streamLabel = STREAM_LABELS[entry.stream] || entry.stream;
+    if (streamLabel) pills.push(["", streamLabel]);
+    for (const [cls, text] of pills) {
+      const span = document.createElement("span");
+      span.className = `detail__pill ${cls}`.trim();
+      span.textContent = text;
+      metaEl.appendChild(span);
+    }
+
+    // Genres
+    for (const g of (ext.genres || [])) {
+      const span = document.createElement("span");
+      span.textContent = `#${g}`;
+      genresEl.appendChild(span);
+    }
+
+    // Overview
+    overviewEl.textContent = ext.overview || (ext.extra && ext.extra.description) || "Keine Beschreibung verfügbar.";
+
+    // Stats
+    const seasons = entry.seasons || {};
+    const seasonCount = Object.keys(seasons).length;
+    const totalEpisodes = Object.values(seasons).reduce((a, s) => a + (s.episode_count || 0), 0);
+    const downloaded = Object.values(seasons).reduce((a, s) => a + ((s.downloaded || []).length), 0);
+    const stats = [
+      ["Staffeln", String(seasonCount)],
+      ["Episoden", totalEpisodes ? `${downloaded} / ${totalEpisodes}` : String(downloaded)],
+    ];
+    for (const [label, value] of stats) {
+      const cell = document.createElement("div");
+      const strong = document.createElement("strong");
+      strong.textContent = value;
+      cell.appendChild(strong);
+      const sub = document.createElement("span");
+      sub.textContent = label;
+      cell.appendChild(sub);
+      statsEl.appendChild(cell);
+    }
+
+    // Actions — primary link to the stream page, secondary links to each
+    // metadata provider that offered a ``source_url``.
+    const url = seriesUrlFor(row);
+    if (url) {
+      const openBtn = document.createElement("button");
+      openBtn.type = "button";
+      openBtn.textContent = `Auf ${streamLabel || "Seite"} öffnen`;
+      openBtn.addEventListener("click", () => {
+        chrome.tabs.create({ url });
+        hideDetailModal();
+      });
+      actionsEl.appendChild(openBtn);
+    }
+    for (const [providerName, block] of Object.entries(external)) {
+      if (!block || !block.source_url) continue;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "detail__actions-secondary";
+      btn.textContent = `${providerName.toUpperCase()} ↗`;
+      btn.title = block.source_url;
+      btn.addEventListener("click", () => {
+        chrome.tabs.create({ url: block.source_url });
+      });
+      actionsEl.appendChild(btn);
+    }
+  }
+
+  function hideDetailModal() {
+    const modal = document.querySelector("#ss-detail");
+    modal.hidden = true;
+    modal.setAttribute("aria-hidden", "true");
+  }
+
+  function wireDetailModal() {
+    document.querySelector("#ss-detail-close").addEventListener("click", hideDetailModal);
+    document.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape") hideDetailModal();
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", () => { init(); wireDetailModal(); });
 })();

@@ -7,6 +7,52 @@ required CLI version via the `minCliVersion` key in `manifest.json`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] — 2026-04-24
+
+### Added
+- **Detail-Modal im Popup:** Klick auf eine Karte öffnet ein Overlay
+  mit Cover, Backdrop, **FSK/USK**-Badge, Rating, Genres, Beschreibung,
+  Staffel-/Episoden-Zähler und "Auf Seite öffnen"-Button. Zusätzlich
+  Sekundär-Buttons pro Metadaten-Anbieter, die auf dessen Detail-Seite
+  springen (TMDb, AniList, TVmaze, Jikan/MAL).
+- **Provider-Registry + Fallback-Kette** pro Stream. Konfigurierbar in
+  `~/.streamseeker/config.json`:
+  ```json
+  "metadata_chains": {
+    "aniworldto": ["anilist", "jikan", "tmdb"],
+    "sto": ["tmdb", "tvmaze"],
+    "megakinotax": ["tmdb"]
+  }
+  ```
+  Jeder erfolgreiche Provider-Hit trägt seinen Block zu `external.*`
+  bei; der erste Hit besitzt Artwork, alle anderen steuern nur Daten
+  (z.B. FSK von TMDb + Studios von AniList).
+- **Zwei neue Provider** ohne API-Key-Ballast:
+  - **TVmaze** — TV-fokussiert, keyfree, guter TMDb-Fallback für s.to
+  - **Jikan** (MyAnimeList) — Anime-Fallback für AniList bei obskuren Titeln
+- **Direktlinks zum Provider** — jeder Match speichert jetzt
+  `source_url` (z.B. `https://anilist.co/anime/101`) im
+  `external.<provider>`-Block; Detail-Modal zeigt sie als Sprungziel.
+
+### Fixed
+- Auf der Serien-Startseite (URL ohne `/staffel-N/`, z.B.
+  `/anime/stream/dragonball-gt`) wurden Episoden-Links nicht
+  eingefärbt. Der Content-Script extrahiert jetzt die Staffel direkt
+  aus jedem Anchor-href statt nur aus `location.pathname`.
+
+## [0.9.0] — 2026-04-24
+
+### Added
+- **Bestand markieren** im "Zur Sammlung hinzufügen"-Modal. Umschalter
+  oben im Modal zwischen **⬇ Herunterladen** und **✓ Bestand
+  markieren**. Letzterer Modus fügt Episoden als "vorhanden" in die
+  Sammlung ein, ohne einen Download auszulösen — ideal für User, die
+  schon viele Episoden auf Platte haben und die Sammlung nachträglich
+  auffüllen wollen. Der Update-Checker erkennt sie danach genauso.
+- Neuer Daemon-Endpoint `POST /library/mark` (akzeptiert dieselben
+  Scope-Werte wie `/queue`: `single/season/season_from/from/all`) plus
+  automatisches Metadata-Enrichment nach dem Markieren.
+
 ## [0.8.0] — 2026-04-24
 
 ### Changed

@@ -1,4 +1,10 @@
-"""Paket G.5 — MetadataResolver: provider dispatch + image caching."""
+"""MetadataResolver: provider-chain dispatch + image caching.
+
+Paket G.5 originally exercised a single provider per stream; after ADR 0015
+every stream has an ordered *chain* (config-driven). These tests pin
+``metadata_chains`` in ``config.json`` so a single provider is exercised in
+isolation even when the default chain would try more than one.
+"""
 
 from __future__ import annotations
 
@@ -15,17 +21,35 @@ from streamseeker.api.core.helpers import Singleton
 from streamseeker.api.core.library import LibraryStore
 from streamseeker.api.core.library.store import KIND_LIBRARY
 from streamseeker.api.core.metadata.anilist import AniListProvider
-from streamseeker.api.core.metadata.base import MetadataMatch, MetadataUnavailableError
+from streamseeker.api.core.metadata.base import MetadataMatch
+from streamseeker.api.core.metadata.registry import (
+    available_providers,
+    build_provider,
+    chain_for,
+    register_provider,
+)
 from streamseeker.api.core.metadata.resolver import MetadataResolver
 from streamseeker.api.core.metadata.tmdb import TmdbProvider
+
+
+def _write_config(**chains: list[str]) -> None:
+    cfg = {"metadata_chains": dict(chains)} if chains else {}
+    paths.config_file().write_text(json.dumps(cfg))
 
 
 @pytest.fixture(autouse=True)
 def sandbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("STREAMSEEKER_HOME", str(tmp_path))
     Singleton._instances.pop(LibraryStore, None)
-    # Give TMDb a fake key by default so provider construction succeeds
     paths.credentials_file().write_text(json.dumps({"tmdb_api_key": "testkey"}))
+    # Default: each test gets a single-provider chain so existing
+    # single-provider tests stay simple. Tests that care about chains
+    # override _write_config themselves.
+    _write_config(
+        aniworldto=["anilist"],
+        sto=["tmdb"],
+        megakinotax=["tmdb"],
+    )
     yield
     Singleton._instances.pop(LibraryStore, None)
 
@@ -48,56 +72,47 @@ def _match(provider: str, **kwargs) -> MetadataMatch:
     return MetadataMatch(**base)
 
 
-# --- provider dispatch ----------------------------------------------
+# --- registry --------------------------------------------------------
 
 
-def test_provider_for_aniworldto_is_anilist() -> None:
-    resolver = MetadataResolver()
-    provider, kind = resolver.provider_for("aniworldto")
-    assert isinstance(provider, AniListProvider)
-    assert kind == "tv"
+def test_default_chains_match_adr_expectations() -> None:
+    # Unset the sandbox override → fall back to registry defaults
+    paths.config_file().unlink()
+    assert chain_for("aniworldto") == ["anilist", "jikan", "tmdb"]
+    assert chain_for("sto") == ["tmdb", "tvmaze"]
+    assert chain_for("megakinotax") == ["tmdb"]
+    assert chain_for("unknown") == []
 
 
-def test_provider_for_sto_is_tmdb_tv() -> None:
-    resolver = MetadataResolver()
-    provider, kind = resolver.provider_for("sto")
-    assert isinstance(provider, TmdbProvider)
-    assert kind == "tv"
+def test_chain_respects_config_override() -> None:
+    _write_config(sto=["tmdb", "anilist"])
+    assert chain_for("sto") == ["tmdb", "anilist"]
 
 
-def test_provider_for_megakinotax_is_tmdb_movie() -> None:
-    resolver = MetadataResolver()
-    provider, kind = resolver.provider_for("megakinotax")
-    assert isinstance(provider, TmdbProvider)
-    assert kind == "movie"
-
-
-def test_provider_for_unknown_stream_is_none() -> None:
-    resolver = MetadataResolver()
-    provider, _ = resolver.provider_for("unknown-stream")
-    assert provider is None
-
-
-def test_provider_for_sto_is_none_without_tmdb_key() -> None:
-    paths.credentials_file().unlink()  # remove testkey
-    resolver = MetadataResolver()
-    provider, _ = resolver.provider_for("sto")
-    assert provider is None
-
-
-def test_provider_for_aniworldto_works_without_tmdb_key() -> None:
+def test_build_provider_returns_none_when_unavailable() -> None:
     paths.credentials_file().unlink()
-    resolver = MetadataResolver()
-    provider, _ = resolver.provider_for("aniworldto")
-    assert isinstance(provider, AniListProvider)
+    assert build_provider("tmdb") is None
+    # AniList needs no credential and should still come up
+    assert isinstance(build_provider("anilist"), AniListProvider)
+
+
+def test_register_provider_exposes_new_name() -> None:
+    class Dummy:
+        name = "dummy"
+
+        def search(self, *_a, **_k):
+            return None
+
+    register_provider("dummy", Dummy)
+    assert "dummy" in available_providers()
+    assert isinstance(build_provider("dummy"), Dummy)
 
 
 # --- enrich ---------------------------------------------------------
 
 
-def _mock_image_response(url: str, body: bytes):
-    """Build a MagicMock matching requests.get for an image download."""
-    def fake_get(u, timeout=None, stream=False):
+def _mock_image_response(body: bytes):
+    def fake_get(url, timeout=None, stream=False, **_kw):
         mock = MagicMock()
         mock.status_code = 200
         mock.content = body
@@ -110,14 +125,16 @@ def test_enrich_returns_false_for_missing_entry() -> None:
     assert MetadataResolver().enrich("sto::ghost") is False
 
 
-def test_enrich_no_provider_returns_false() -> None:
+def test_enrich_no_chain_returns_false() -> None:
     LibraryStore().add(KIND_LIBRARY, {"stream": "unknown", "slug": "x"})
     assert MetadataResolver().enrich("unknown::x") is False
 
 
 def test_enrich_writes_external_block_and_downloads_images() -> None:
-    LibraryStore().add(KIND_LIBRARY, {"stream": "aniworldto", "slug": "oshi-no-ko",
-                                      "title": "Oshi No Ko", "year": 2023})
+    LibraryStore().add(KIND_LIBRARY, {
+        "stream": "aniworldto", "slug": "oshi-no-ko",
+        "title": "Oshi No Ko", "year": 2023,
+    })
 
     match = _match("anilist", id=101, title="Oshi No Ko", year=2023,
                    poster_url="https://cdn/poster.png",
@@ -126,7 +143,7 @@ def test_enrich_writes_external_block_and_downloads_images() -> None:
     png = _tiny_png_bytes()
     with patch.object(AniListProvider, "search", return_value=match), \
          patch("streamseeker.api.core.metadata.resolver.requests.get",
-               side_effect=_mock_image_response("", png)):
+               side_effect=_mock_image_response(png)):
         assert MetadataResolver().enrich("aniworldto::oshi-no-ko") is True
 
     entry = LibraryStore().get(KIND_LIBRARY, "aniworldto::oshi-no-ko")
@@ -136,23 +153,20 @@ def test_enrich_writes_external_block_and_downloads_images() -> None:
     assert external["backdrop"] == "backdrop.jpg"
     assert "fetched_at" in external
 
-    # Assets on disk
     asset_dir = paths.series_dir(KIND_LIBRARY, "aniworldto", "oshi-no-ko")
     assert (asset_dir / "poster.jpg").is_file()
     assert (asset_dir / "backdrop.jpg").is_file()
-    # Re-encoded to JPEG — header check
     data = (asset_dir / "poster.jpg").read_bytes()
-    assert data[:3] == b"\xff\xd8\xff"  # JPEG SOI marker
+    assert data[:3] == b"\xff\xd8\xff"
 
 
 def test_enrich_survives_image_download_failure() -> None:
-    """If the image host fails, the external block is still written (no poster)."""
     LibraryStore().add(KIND_LIBRARY, {"stream": "aniworldto", "slug": "x", "title": "X"})
 
     match = _match("anilist", id=1, title="X",
                    poster_url="https://cdn/404.png", backdrop_url=None)
 
-    def fail_get(u, timeout=None, stream=False):
+    def fail_get(url, timeout=None, stream=False, **_kw):
         import requests
         raise requests.ConnectionError("boom")
 
@@ -163,12 +177,11 @@ def test_enrich_survives_image_download_failure() -> None:
 
     entry = LibraryStore().get(KIND_LIBRARY, "aniworldto::x")
     external = entry["external"]["anilist"]
-    assert "poster" not in external  # download failed, skipped
+    assert "poster" not in external
     assert external["id"] == 1
 
 
 def test_enrich_survives_provider_network_error() -> None:
-    """RequestException from the provider → no external block, no raise."""
     LibraryStore().add(KIND_LIBRARY, {"stream": "aniworldto", "slug": "x", "title": "X"})
 
     import requests as _r
@@ -192,7 +205,6 @@ def test_enrich_fills_missing_year_from_match() -> None:
 
 
 def test_enrich_preserves_existing_downloaded_progress() -> None:
-    """Re-enriching a series with downloaded episodes must not wipe them."""
     store = LibraryStore()
     store.mark_episode_downloaded("aniworldto::x", 1, 1)
     store.mark_episode_downloaded("aniworldto::x", 1, 2)
@@ -204,3 +216,32 @@ def test_enrich_preserves_existing_downloaded_progress() -> None:
     entry = store.get(KIND_LIBRARY, "aniworldto::x")
     assert entry["seasons"]["1"]["downloaded"] == [1, 2]
     assert "anilist" in entry["external"]
+
+
+def test_enrich_runs_full_chain_and_merges_all_hits() -> None:
+    """With a multi-provider chain, every hit contributes its own
+    ``external.<provider>`` block. The first hit owns the artwork."""
+    _write_config(aniworldto=["anilist", "tmdb"])
+    LibraryStore().add(KIND_LIBRARY, {"stream": "aniworldto", "slug": "x", "title": "X"})
+
+    ani_match = _match("anilist", id=1, title="X",
+                       poster_url="https://cdn/p.png", backdrop_url=None)
+    tmdb_match = _match("tmdb", id=77, title="X",
+                        poster_url="https://cdn/p2.png", backdrop_url=None,
+                        fsk="FSK 12")
+
+    png = _tiny_png_bytes()
+    with patch.object(AniListProvider, "search", return_value=ani_match), \
+         patch.object(TmdbProvider, "search", return_value=tmdb_match), \
+         patch("streamseeker.api.core.metadata.resolver.requests.get",
+               side_effect=_mock_image_response(png)):
+        assert MetadataResolver().enrich("aniworldto::x") is True
+
+    entry = LibraryStore().get(KIND_LIBRARY, "aniworldto::x")
+    external = entry["external"]
+    assert "anilist" in external and "tmdb" in external
+    # First provider (anilist) downloaded artwork; second didn't overwrite.
+    assert external["anilist"].get("poster") == "poster.jpg"
+    assert "poster" not in external["tmdb"]
+    # FSK comes from TMDb and must not be lost in the merge
+    assert external["tmdb"]["fsk"] == "FSK 12"

@@ -289,16 +289,25 @@
       if (parent.normalize) parent.normalize();
     }
 
+    // Prefer the season the user is currently on (URL). If the page shows
+    // episodes from multiple seasons (series landing page, search results)
+    // we fall back to extracting the season from each anchor's href — so
+    // all episodes get coloured consistently, no matter which page layout
+    // the stream serves.
     const currentSeason = location.pathname.match(/\/staffel-(\d+)/);
-    if (currentSeason) {
-      const seasonKey = currentSeason[1];
-      const s = seasons[seasonKey] || { episodes: {} };
+    {
+      const currentSeasonKey = currentSeason ? currentSeason[1] : null;
       const LABEL_RE = /^(?:Folge|Episode|Ep\.?|Film|Movie)?\s*\d+$/i;
 
       for (const link of document.querySelectorAll('a[href*="/episode-"]')) {
         if (isActiveLink(link)) continue;
-        const m = link.getAttribute("href").match(/\/episode-(\d+)/);
+        const href = link.getAttribute("href") || "";
+        const m = href.match(/\/episode-(\d+)/);
         if (!m) continue;
+        const seasonMatch = href.match(/\/staffel-(\d+)\//);
+        const seasonKey = (seasonMatch && seasonMatch[1]) || currentSeasonKey;
+        if (!seasonKey) continue;
+        const s = seasons[seasonKey] || { episodes: {} };
         const epStatus = (s.episodes || {})[m[1]];
         if (!epStatus) continue;
 
@@ -386,17 +395,24 @@
     modal.appendChild(el("h2", { text: title }));
 
     if (options.isMovie) {
-      const subtle = "Ganzen Film zur Sammlung hinzufügen";
-      modal.appendChild(el("p", { class: "subtle", text: subtle }));
+      modal.appendChild(el("p", { class: "subtle", text: "Was soll passieren?" }));
+      const movieState = { intent: "download" };
+      modal.appendChild(buildIntentToggle(movieState, () => {}));
       const submit = el("button", { class: "ss-btn ss-btn--primary", text: "Hinzufügen", type: "button" });
       submit.addEventListener("click", async () => {
         backdrop.remove();
+        const payload = {
+          stream: options.stream, slug: info.slug,
+          type: "filme", scope: "single", season: 0, episode: 1,
+        };
         try {
-          await api.queueAdd({
-            stream: options.stream, slug: info.slug,
-            type: "filme", scope: "single", season: 0, episode: 1,
-          });
-          toast("Film – wird gesammelt");
+          if (movieState.intent === "mark") {
+            await api.libraryMark(payload);
+            toast("Als vorhanden markiert");
+          } else {
+            await api.queueAdd(payload);
+            toast("Film – wird gesammelt");
+          }
           refresh(options, info);
         } catch (err) { toast(String(err), { error: true }); }
       });
@@ -437,6 +453,7 @@
 
     // State
     const state = {
+      intent: "download",  // or "mark"
       mode: info.season && info.episode ? "single"
         : info.season ? "season" : "all",
       season: info.season || (seasons[0] || 0),
@@ -445,6 +462,8 @@
       provider: firstKey(providers, "voe") || firstKey(providers),
       episodes: [],
     };
+
+    modal.appendChild(buildIntentToggle(state, () => updateFields()));
 
     const modeList = el("div", { class: "ss-modal__modes" });
     for (const mode of MODE_SERIES) {
@@ -505,30 +524,43 @@
       }
     }
 
+    const submit = el("button", { class: "ss-btn ss-btn--primary", text: "Zur Sammlung hinzufügen", type: "button" });
+
     function updateFields() {
       const mode = MODE_SERIES.find((m) => m.key === state.mode);
       const needs = new Set(mode.needs);
       seasonField.wrapper.style.display = needs.has("season") ? "" : "none";
       episodeField.wrapper.style.display = needs.has("episode") ? "" : "none";
+      const markMode = state.intent === "mark";
+      languageField.wrapper.style.display = markMode ? "none" : "";
+      providerField.wrapper.style.display = markMode ? "none" : "";
+      submit.textContent = markMode ? "Als vorhanden markieren" : "Zur Sammlung hinzufügen";
     }
     updateFields();
     await loadEpisodes();
 
-    const submit = el("button", { class: "ss-btn ss-btn--primary", text: "Zur Sammlung hinzufügen", type: "button" });
     submit.addEventListener("click", async () => {
       backdrop.remove();
+      const basePayload = {
+        stream: options.stream,
+        slug: info.slug,
+        type: "staffel",
+        scope: state.mode,
+        season: state.season,
+        episode: state.episode,
+      };
       try {
-        await api.queueAdd({
-          stream: options.stream,
-          slug: info.slug,
-          type: "staffel",
-          scope: state.mode,
-          season: state.season,
-          episode: state.episode,
-          language: state.language,
-          preferred_provider: state.provider,
-        });
-        toast("Zur Sammlung hinzugefügt");
+        if (state.intent === "mark") {
+          await api.libraryMark(basePayload);
+          toast("Als vorhanden markiert");
+        } else {
+          await api.queueAdd({
+            ...basePayload,
+            language: state.language,
+            preferred_provider: state.provider,
+          });
+          toast("Zur Sammlung hinzugefügt");
+        }
         refresh(options, info);
       } catch (err) {
         toast(String(err), { error: true });
@@ -540,6 +572,31 @@
         onClick: () => backdrop.remove() }),
       submit,
     ]));
+  }
+
+  function buildIntentToggle(stateLike, onChange) {
+    const toggle = el("div", { class: "ss-modal__intent" });
+    const options = [
+      { key: "download", label: "⬇ Herunterladen", detail: "Download starten" },
+      { key: "mark", label: "✓ Bestand markieren", detail: "Schon vorhanden, nicht laden" },
+    ];
+    for (const opt of options) {
+      const btn = el("button", {
+        type: "button",
+        class: `ss-modal__intent-btn ${stateLike.intent === opt.key ? "is-active" : ""}`.trim(),
+      }, [
+        el("strong", { text: opt.label }),
+        el("span", { class: "subtle", text: opt.detail }),
+      ]);
+      btn.addEventListener("click", () => {
+        stateLike.intent = opt.key;
+        toggle.querySelectorAll(".ss-modal__intent-btn").forEach((b) => b.classList.remove("is-active"));
+        btn.classList.add("is-active");
+        onChange();
+      });
+      toggle.appendChild(btn);
+    }
+    return toggle;
   }
 
   function firstKey(obj, preferred) {

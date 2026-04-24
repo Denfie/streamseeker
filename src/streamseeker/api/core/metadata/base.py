@@ -38,6 +38,7 @@ class MetadataMatch:
     poster_url: str | None = None
     backdrop_url: str | None = None
     logo_url: str | None = None
+    source_url: str | None = None       # canonical URL on the provider's site
     extra: dict = field(default_factory=dict)
 
     def to_external_block(self, *, poster_file: str | None = None,
@@ -56,6 +57,8 @@ class MetadataMatch:
             block["rating"] = self.rating
         if self.fsk is not None:
             block["fsk"] = self.fsk
+        if self.source_url is not None:
+            block["source_url"] = self.source_url
         if poster_file is not None:
             block["poster"] = poster_file
         if backdrop_file is not None:

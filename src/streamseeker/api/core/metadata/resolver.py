@@ -24,13 +24,15 @@ from streamseeker import paths
 from streamseeker.api.core.library import LibraryStore
 from streamseeker.api.core.library.store import KIND_FAVORITES, KIND_LIBRARY
 from streamseeker.api.core.logger import Logger
-from streamseeker.api.core.metadata.anilist import AniListProvider
 from streamseeker.api.core.metadata.base import (
     MetadataMatch,
     MetadataProvider,
-    MetadataUnavailableError,
 )
-from streamseeker.api.core.metadata.tmdb import TmdbProvider
+from streamseeker.api.core.metadata.registry import (
+    build_provider,
+    chain_for,
+    kind_for,
+)
 
 logger = Logger().instance()
 
@@ -45,56 +47,33 @@ LOGO_FILENAME = "logo.png"
 
 
 class MetadataResolver:
-    """Decide which provider to call and apply its match to the Library."""
+    """Walk the configured provider chain for a stream and merge every
+    successful hit into the entry's ``external`` dict.
+
+    Chain configuration lives in ``config.json`` (see ``registry.py``) —
+    ADR 0007/0008 cover the default pick per stream.
+    """
 
     def __init__(self) -> None:
-        # Build providers lazily — missing TMDb key must not break AniList.
-        self._providers_by_stream: dict[str, tuple[MetadataProvider, str]] = {}
         self._store = LibraryStore()
+        self._provider_cache: dict[str, MetadataProvider | None] = {}
 
-    # ------------------------------------------------------------------
-    # Provider choice
-    # ------------------------------------------------------------------
-
-    def provider_for(self, stream: str) -> tuple[MetadataProvider | None, str]:
-        """Return (provider, kind) for a stream slug. Caches instances."""
-        if stream in self._providers_by_stream:
-            return self._providers_by_stream[stream]
-
-        provider: MetadataProvider | None
-        kind: str
-        if stream == "aniworldto":
-            provider = AniListProvider()
-            kind = "tv"
-        elif stream == "sto":
-            try:
-                provider = TmdbProvider()
-            except MetadataUnavailableError:
-                provider = None
-            kind = "tv"
-        elif stream == "megakinotax":
-            try:
-                provider = TmdbProvider()
-            except MetadataUnavailableError:
-                provider = None
-            kind = "movie"
-        else:
-            provider = None
-            kind = "tv"
-
-        self._providers_by_stream[stream] = (provider, kind)
-        return provider, kind
+    def _get_provider(self, name: str) -> MetadataProvider | None:
+        if name not in self._provider_cache:
+            self._provider_cache[name] = build_provider(name)
+        return self._provider_cache[name]
 
     # ------------------------------------------------------------------
     # Main entry points
     # ------------------------------------------------------------------
 
     def enrich(self, key: str, *, kind: str = KIND_LIBRARY) -> bool:
-        """Look up metadata for a Library- or Favorites-Eintrag and merge it.
+        """Run the provider chain for ``key``. Every provider that returns
+        a match contributes its block to ``external``; the main entry
+        (title, year) is taken from the **first** provider that hit.
 
-        Returns True if any enrichment was applied. Never raises — all
-        upstream failures are logged and swallowed so store writes are
-        best-effort.
+        Returns True if at least one provider contributed. Never raises —
+        upstream failures are logged and swallowed.
         """
         entry = self._store.get(kind, key)
         if entry is None:
@@ -104,42 +83,63 @@ class MetadataResolver:
         slug = entry.get("slug") or ""
         title = entry.get("title") or slug.replace("-", " ").title()
         year = entry.get("year")
+        search_kind = kind_for(stream)
 
-        provider, search_kind = self.provider_for(stream)
-        if provider is None:
-            logger.debug(f"metadata: no provider for stream {stream!r}")
+        chain = chain_for(stream)
+        if not chain:
+            logger.debug(f"metadata: no chain configured for stream {stream!r}")
             return False
 
-        try:
-            match = provider.search(title, year=year, kind=search_kind)
-        except requests.RequestException as exc:
-            logger.warning(f"metadata lookup failed for {key}: {exc}")
-            return False
-
-        if match is None:
-            logger.debug(f"metadata: no match for {key} on {provider.name}")
-            return False
-
-        # Cache images and build the external block
-        asset_dir = paths.series_dir(kind, stream, slug)
-        poster_file = self._cache_image(match.poster_url, asset_dir, POSTER_FILENAME)
-        backdrop_file = self._cache_image(match.backdrop_url, asset_dir, BACKDROP_FILENAME)
-        logo_file = self._cache_image(match.logo_url, asset_dir, LOGO_FILENAME, allow_png=True)
-
-        block = match.to_external_block(
-            poster_file=poster_file,
-            backdrop_file=backdrop_file,
-            logo_file=logo_file,
-            fetched_at=datetime.now(timezone.utc).isoformat(),
-        )
-
-        # Merge via add() so we inherit existing downloaded-episode lists
         patched = dict(entry)
         patched.setdefault("external", {})
-        patched["external"] = {**entry.get("external", {}), provider.name: block}
-        # Also pull in year/title from the match if the entry lacked them
-        if not entry.get("year") and match.year:
-            patched["year"] = match.year
+        existing_external = dict(patched.get("external") or {})
+
+        primary_applied = False
+        any_applied = False
+
+        for provider_name in chain:
+            provider = self._get_provider(provider_name)
+            if provider is None:
+                logger.debug(f"metadata: provider {provider_name!r} unavailable, skipping")
+                continue
+
+            try:
+                match = provider.search(title, year=year, kind=search_kind)
+            except requests.RequestException as exc:
+                logger.warning(f"metadata lookup failed for {key} via {provider_name}: {exc}")
+                continue
+
+            if match is None:
+                logger.debug(f"metadata: no match for {key} on {provider.name}")
+                continue
+
+            # Cache images (only for the primary hit — subsequent providers
+            # contribute data, not artwork, to avoid churn).
+            poster_file = backdrop_file = logo_file = None
+            if not primary_applied:
+                asset_dir = paths.series_dir(kind, stream, slug)
+                poster_file = self._cache_image(match.poster_url, asset_dir, POSTER_FILENAME)
+                backdrop_file = self._cache_image(match.backdrop_url, asset_dir, BACKDROP_FILENAME)
+                logo_file = self._cache_image(match.logo_url, asset_dir, LOGO_FILENAME, allow_png=True)
+
+            block = match.to_external_block(
+                poster_file=poster_file,
+                backdrop_file=backdrop_file,
+                logo_file=logo_file,
+                fetched_at=datetime.now(timezone.utc).isoformat(),
+            )
+            existing_external[provider.name] = block
+            any_applied = True
+
+            if not primary_applied:
+                if not entry.get("year") and match.year:
+                    patched["year"] = match.year
+                primary_applied = True
+
+        if not any_applied:
+            return False
+
+        patched["external"] = existing_external
         self._store.add(kind, patched)
         return True
 

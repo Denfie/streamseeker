@@ -55,13 +55,22 @@ class FavoriteRequest(BaseModel):
 class QueueItemRequest(BaseModel):
     stream: str
     slug: str
-    scope: Optional[str] = None  # "single" | "season" | "from" | "all"
+    scope: Optional[str] = None  # "single" | "season" | "season_from" | "from" | "all"
     type: str = "staffel"
     season: int = 0
     episode: int = 0
     language: str = "german"
     preferred_provider: Optional[str] = None
     file_name: Optional[str] = None
+
+
+class MarkRequest(BaseModel):
+    stream: str
+    slug: str
+    scope: Optional[str] = None
+    type: str = "staffel"
+    season: int = 0
+    episode: int = 0
 
 
 # ---------------------------------------------------------------------
@@ -465,6 +474,86 @@ def create_app() -> FastAPI:
     @app.get("/library/{key:path}/backdrop")
     def library_backdrop(key: str):
         return _serve_asset(key, "backdrop.jpg")
+
+    @app.post("/library/mark", status_code=201)
+    def library_mark(req: MarkRequest) -> dict:
+        """Mark episodes/movies as already-owned without downloading.
+
+        Useful when the user already has files on disk from before using
+        StreamSeeker — they can seed the library so the update checker
+        picks it up, covers get fetched and downloads aren't duplicated.
+        """
+        from streamseeker.api.handler import StreamseekerHandler
+
+        handler = StreamseekerHandler()
+        key = f"{req.stream}::{req.slug}"
+        store = LibraryStore()
+        scope = (req.scope or _infer_scope(req)).lower()
+        marked = 0
+
+        def _mark_episode(season: int, episode: int) -> None:
+            nonlocal marked
+            store.mark_episode_downloaded(key, season, episode)
+            marked += 1
+
+        def _mark_movie(movie_num: int) -> None:
+            nonlocal marked
+            store.mark_movie_downloaded(key, movie_num)
+            marked += 1
+
+        try:
+            if req.type == "filme":
+                info = handler.search(req.stream, req.slug) or {}
+                movies = list(info.get("movies") or [])
+                if scope == "single":
+                    _mark_movie(req.episode or 1)
+                else:
+                    for m in (movies or [1]):
+                        _mark_movie(m)
+            else:
+                info = handler.search(req.stream, req.slug) or {}
+                seasons = list(info.get("series") or [])
+
+                # Episode-count lookup with simple cache
+                episodes_cache: dict[int, list[int]] = {}
+                def _episodes_for(season: int) -> list[int]:
+                    if season not in episodes_cache:
+                        episodes_cache[season] = list(
+                            handler.search_episodes(req.stream, req.slug, "staffel", season) or []
+                        )
+                    return episodes_cache[season]
+
+                if scope == "single":
+                    _mark_episode(req.season, req.episode)
+                elif scope == "season":
+                    for ep in _episodes_for(req.season):
+                        _mark_episode(req.season, ep)
+                elif scope == "season_from":
+                    for ep in _episodes_for(req.season):
+                        if ep >= req.episode:
+                            _mark_episode(req.season, ep)
+                elif scope == "from":
+                    for season in seasons:
+                        if season < req.season:
+                            continue
+                        for ep in _episodes_for(season):
+                            if season == req.season and ep < req.episode:
+                                continue
+                            _mark_episode(season, ep)
+                else:  # "all"
+                    for season in seasons:
+                        for ep in _episodes_for(season):
+                            _mark_episode(season, ep)
+
+            # Trigger metadata enrichment so covers get fetched.
+            threading.Thread(
+                target=_safe_enrich, args=(key, KIND_LIBRARY), daemon=True
+            ).start()
+        except Exception as exc:  # noqa: BLE001
+            logger.exception(f"mark failed for {key}: {exc}")
+            raise HTTPException(status_code=500, detail=f"mark failed: {exc}") from exc
+
+        return {"marked": marked, "key": key}
 
     @app.post("/library/{key:path}/refresh")
     def library_refresh(key: str) -> dict:

@@ -123,6 +123,7 @@ class TmdbProvider(MetadataProvider):
             rating=(raw.get("vote_average") or None) and round(float(raw["vote_average"]), 1),
             poster_url=poster,
             backdrop_url=backdrop,
+            source_url=f"https://www.themoviedb.org/{'tv' if kind == 'tv' else 'movie'}/{raw['id']}",
         )
 
     def _detailed_to_match(self, raw: dict, kind: str) -> MetadataMatch:
@@ -144,6 +145,7 @@ class TmdbProvider(MetadataProvider):
             fsk=fsk,
             poster_url=poster,
             backdrop_url=backdrop,
+            source_url=f"https://www.themoviedb.org/{'tv' if kind == 'tv' else 'movie'}/{raw['id']}",
         )
 
     def _image_url(self, path: str | None, size: str) -> str | None:

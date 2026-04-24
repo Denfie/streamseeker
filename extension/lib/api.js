@@ -60,6 +60,7 @@
     libraryList: () => request("GET", "/library"),
     libraryGet: (key) => request("GET", `/library/${encodeURIComponent(key)}`),
     libraryRefresh: (key) => request("POST", `/library/${encodeURIComponent(key)}/refresh`),
+    libraryMark: (payload) => request("POST", "/library/mark", payload),
     libraryState: (stream, slug) =>
       request("GET", `/library/state?stream=${encodeURIComponent(stream)}&slug=${encodeURIComponent(slug)}`),
 

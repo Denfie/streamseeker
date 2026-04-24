@@ -28,3 +28,6 @@ tmp_frames/
 ffmpeg*
 realesrgan*
 !ffmpeg.py
+
+CLAUDE.md
+/docu-intern/*

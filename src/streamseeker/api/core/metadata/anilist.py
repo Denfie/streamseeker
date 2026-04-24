@@ -151,6 +151,7 @@ class AniListProvider(MetadataProvider):
             rating=rating,
             poster_url=poster,
             backdrop_url=banner,
+            source_url=f"https://anilist.co/anime/{raw['id']}",
             extra={
                 "format": raw.get("format"),
                 "episodes": raw.get("episodes"),

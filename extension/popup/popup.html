@@ -38,6 +38,24 @@
     <div class="cards" id="ss-library"></div>
   </section>
 
+  <div id="ss-detail" class="detail" hidden aria-hidden="true" role="dialog">
+    <div class="detail__backdrop" id="ss-detail-backdrop"></div>
+    <button type="button" class="detail__close" id="ss-detail-close" title="Schließen">×</button>
+    <div class="detail__content">
+      <div class="detail__header">
+        <div class="detail__poster" id="ss-detail-poster"></div>
+        <div class="detail__title-block">
+          <h2 class="detail__title" id="ss-detail-title"></h2>
+          <div class="detail__meta-row" id="ss-detail-meta"></div>
+          <div class="detail__genres" id="ss-detail-genres"></div>
+        </div>
+      </div>
+      <p class="detail__overview" id="ss-detail-overview"></p>
+      <div class="detail__stats" id="ss-detail-stats"></div>
+      <div class="detail__actions" id="ss-detail-actions"></div>
+    </div>
+  </div>
+
   <script src="../lib/api.js"></script>
   <script src="popup.js"></script>
 </body>
