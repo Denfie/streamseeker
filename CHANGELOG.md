@@ -8,6 +8,40 @@ See [docu-intern/versioning.md](docu-intern/versioning.md) for the release proce
 
 The browser extension is released independently; see `extension/CHANGELOG.md`.
 
+## [Unreleased]
+
+### Fixed
+- **pipx-Install funktioniert jetzt.** `get_version()` hat vorher
+  `pyproject.toml` aus einem relativen Checkout-Pfad gelesen und in
+  jedem installierten Paket (pipx, pip, wheel) mit `FileNotFoundError`
+  hart gecrashed — der CLI-Start war damit komplett unmöglich. Jetzt
+  primär via `importlib.metadata.version("streamseeker")`, Checkout-
+  Fallback nur wenn das Paket nicht installiert ist.
+
+### Performance
+- **Content-Script-Check (`GET /library/state`) blockiert nicht mehr
+  während Downloads.** Wenn mehrere Downloads parallel laufen und
+  Post-Success-Enrichment-Threads die Library-Lock halten, wartete das
+  Endpoint ggf. sekundenlang und das Einfärben auf aniworld.to/s.to
+  dauerte. Der Endpoint hat jetzt einen 2-s-TTL-Cache pro
+  `(stream, slug)`; Write-Pfade (POST/DELETE auf `/queue`, `/favorites`,
+  `/library/mark`, pause/resume/retry) invalidieren den Cache
+  zielgerichtet. SSE-Push versorgt die UI weiterhin mit Live-Updates,
+  das Cache-Fenster ist nur für initiale Page-Loads relevant.
+
+### Fixed
+- **Library-Index wird nie mehr geschrumpft gespeichert.** Vorher konnte
+  ein stummer Lesefehler oder Multi-Prozess-Race dazu führen, dass ein
+  Schreibvorgang einen fast leeren Index zurückschrieb und der User
+  plötzlich nur noch 2 statt 56 Serien in der Sammlung sah. Die
+  Per-Serien-JSONs auf Platte sind jetzt durchgängig als Quelle der
+  Wahrheit anerkannt: `LibraryStore._update_index_row` und
+  `_remove_index_row` rufen `_self_heal` auf, das den Index aus den
+  Dateien neu aufbaut, sobald die Cache-Größe kleiner als die
+  Datei-Anzahl ist. `_read_index` fällt bei fehlender/korrupter
+  `index.json` ebenfalls auf Rebuild zurück. Zusätzlich verifiziert ein
+  neuer `startup`-Hook im Daemon den Index bei jedem Start.
+
 ## [0.2.0] — 2026-04-24
 
 ### Added

@@ -56,12 +56,28 @@ def getencoding() -> str:
 
 
 def get_version() -> str:
-    from pathlib import Path
+    """Return the installed package version.
 
-    pyproject_path = Path(__file__).resolve().parents[3] / "pyproject.toml"
-    with open(pyproject_path, "rb") as f:
-        data = tomllib.load(f)
-    return data["tool"]["poetry"]["version"]
+    Primary source: ``importlib.metadata`` — works for every install mode
+    (pipx, pip, poetry-shell, wheel). Fallback to reading ``pyproject.toml``
+    next to the source tree so an uninstalled checkout still reports a
+    version. Returns ``"0.0.0+unknown"`` if neither works — never raises,
+    because a missing version must not break CLI startup.
+    """
+    try:
+        return metadata.version("streamseeker")
+    except metadata.PackageNotFoundError:
+        pass
+
+    try:
+        from pathlib import Path
+
+        pyproject_path = Path(__file__).resolve().parents[3] / "pyproject.toml"
+        with open(pyproject_path, "rb") as f:
+            data = tomllib.load(f)
+        return data["tool"]["poetry"]["version"]
+    except (FileNotFoundError, KeyError, OSError):
+        return "0.0.0+unknown"
 
 
 __all__ = [

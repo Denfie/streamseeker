@@ -59,7 +59,15 @@
 
     libraryList: () => request("GET", "/library"),
     libraryGet: (key) => request("GET", `/library/${encodeURIComponent(key)}`),
-    libraryRefresh: (key) => request("POST", `/library/${encodeURIComponent(key)}/refresh`),
+    libraryDelete: (key) => request("DELETE", `/library/${encodeURIComponent(key)}`),
+    libraryRefresh: (key, opts = {}) => {
+      const qs = new URLSearchParams();
+      if (opts.title) qs.set("title", opts.title);
+      if (opts.year) qs.set("year", String(opts.year));
+      if (opts.reset) qs.set("reset", "true");
+      const suffix = qs.toString() ? `?${qs.toString()}` : "";
+      return request("POST", `/library/${encodeURIComponent(key)}/refresh${suffix}`);
+    },
     libraryMark: (payload) => request("POST", "/library/mark", payload),
     libraryState: (stream, slug) =>
       request("GET", `/library/state?stream=${encodeURIComponent(stream)}&slug=${encodeURIComponent(slug)}`),

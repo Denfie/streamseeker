@@ -14,7 +14,7 @@
 
   const STREAM_URL_BUILDERS = {
     aniworldto: (slug) => `https://aniworld.to/anime/stream/${slug}`,
-    sto: (slug) => `https://s.to/serie/stream/${slug}`,
+    sto: (slug) => `https://s.to/serie/${slug}`,
     megakinotax: (slug) => `https://megakino.tax/${slug}.html`,
   };
 
@@ -463,6 +463,27 @@
     return btn;
   }
 
+  // FSK-Farbschema: 0 = weiß, 6 = gelb, 12 = grün, 16 = blau, 18 = rot.
+  // Akzeptiert "FSK 12", "12", 12. Andere Zertifikate (z.B. "TV-MA")
+  // werden ignoriert, weil sie keine FSK-Zahl sind.
+  function parseFskNumber(raw) {
+    if (raw == null) return null;
+    const m = String(raw).match(/\b(\d{1,2})\b/);
+    if (!m) return null;
+    const n = parseInt(m[1], 10);
+    return [0, 6, 12, 16, 18].includes(n) ? n : null;
+  }
+
+  function renderFskBadge(raw) {
+    const n = parseFskNumber(raw);
+    if (n == null) return null;
+    const badge = document.createElement("span");
+    badge.className = `fsk-badge fsk-badge--${n}`;
+    badge.textContent = String(n);
+    badge.title = `FSK ${n}`;
+    return badge;
+  }
+
   function renderCard(row, { showPromote }) {
     const card = document.createElement("div");
     card.className = "card";
@@ -500,6 +521,10 @@
 
     const right = document.createElement("div");
     right.className = "card__actions";
+
+    const fskBadge = renderFskBadge(row.fsk);
+    if (fskBadge) right.appendChild(fskBadge);
+
     const progress = document.createElement("div");
     progress.className = "card__progress";
     const total = row.total_count || 0;
@@ -537,8 +562,18 @@
 
   // ----- Detail modal ---------------------------------------------
 
+  let savedScrollY = 0;
+
   async function showDetailModal(row) {
     const modal = document.querySelector("#ss-detail");
+    const alreadyOpen = !modal.hidden;
+    if (!alreadyOpen) {
+      // Remember where the user was so we can jump back on close.
+      savedScrollY = window.scrollY || document.documentElement.scrollTop || 0;
+      document.documentElement.classList.add("ss-detail-open");
+      document.body.classList.add("ss-detail-open");
+      modal.scrollTop = 0;
+    }
     const backdrop = document.querySelector("#ss-detail-backdrop");
     const poster = document.querySelector("#ss-detail-poster");
     const titleEl = document.querySelector("#ss-detail-title");
@@ -569,14 +604,22 @@
       return;
     }
 
-    // Pick the richest external block (TMDb > AniList > first)
+    // Merge all provider blocks so the modal shows every available field.
+    // Preference order: earlier entries win per-field when multiple providers
+    // carry the same data. Artwork always wins from the stored block.
     const external = entry.external || {};
-    const preference = ["tmdb", "tvdb", "anilist", "omdb"];
-    let ext = null;
-    for (const name of preference) {
-      if (external[name]) { ext = external[name]; break; }
+    const preference = ["tmdb", "tvdb", "anilist", "omdb", "tvmaze", "jikan"];
+    const providersOrdered = [
+      ...preference.filter((p) => external[p]),
+      ...Object.keys(external).filter((p) => !preference.includes(p)),
+    ];
+    const ext = {};
+    for (const name of providersOrdered) {
+      const block = external[name] || {};
+      for (const [k, v] of Object.entries(block)) {
+        if (ext[k] == null && v != null) ext[k] = v;
+      }
     }
-    if (!ext) ext = Object.values(external)[0] || {};
 
     // Title + pills row
     titleEl.textContent = entry.title || ext.title || entry.slug || entry.key;
@@ -625,12 +668,15 @@
       statsEl.appendChild(cell);
     }
 
-    // Actions — primary link to the stream page, secondary links to each
-    // metadata provider that offered a ``source_url``.
+    // Actions — three rows:
+    //   1. Primary button (full-width): "Auf <Seite> öffnen"
+    //   2. Icon-only tool row: refresh / search / delete
+    //   3. Provider-link chips below (TMDb, AniList, …)
     const url = seriesUrlFor(row);
     if (url) {
       const openBtn = document.createElement("button");
       openBtn.type = "button";
+      openBtn.className = "detail__primary";
       openBtn.textContent = `Auf ${streamLabel || "Seite"} öffnen`;
       openBtn.addEventListener("click", () => {
         chrome.tabs.create({ url });
@@ -638,24 +684,135 @@
       });
       actionsEl.appendChild(openBtn);
     }
+
+    const iconRow = document.createElement("div");
+    iconRow.className = "detail__icon-row";
+
+    const refreshBtn = iconButton("↻", "Metadaten neu laden", async (btn) => {
+      btn.disabled = true;
+      const prev = btn.textContent;
+      btn.textContent = "…";
+      try {
+        await api.libraryRefresh(row.key);
+        await showDetailModal(row);
+      } catch (err) {
+        btn.textContent = "✕";
+        btn.title = err.message || "Fehlgeschlagen";
+        setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 2000);
+      }
+    });
+    iconRow.appendChild(refreshBtn);
+
+    const tuneBtn = iconButton("🔎", "Mit anderem Titel/Jahr neu suchen", () => {
+      openSearchOverride(row, actionsEl, entry);
+    });
+    iconRow.appendChild(tuneBtn);
+
+    const deleteBtn = iconButton("🗑", "Aus Sammlung entfernen", async (btn) => {
+      const label = entry.title || entry.slug || entry.key;
+      if (!confirm(`"${label}" aus der Sammlung entfernen?\n\nDie heruntergeladenen Videos bleiben erhalten — nur der Sammlungs-Eintrag (inkl. Metadaten & Cover) wird gelöscht.`)) return;
+      btn.disabled = true;
+      btn.textContent = "…";
+      try {
+        await api.libraryDelete(row.key);
+        hideDetailModal();
+        await renderLibrary();
+      } catch (err) {
+        btn.textContent = "✕";
+        btn.title = err.message || "Fehler";
+        setTimeout(() => { btn.disabled = false; btn.textContent = "🗑"; }, 2000);
+      }
+    });
+    deleteBtn.classList.add("detail__icon-btn--danger");
+    iconRow.appendChild(deleteBtn);
+    actionsEl.appendChild(iconRow);
+
+    const providerRow = document.createElement("div");
+    providerRow.className = "detail__provider-row";
     for (const [providerName, block] of Object.entries(external)) {
       if (!block || !block.source_url) continue;
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "detail__actions-secondary";
-      btn.textContent = `${providerName.toUpperCase()} ↗`;
-      btn.title = block.source_url;
-      btn.addEventListener("click", () => {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "detail__provider-chip";
+      chip.textContent = `${providerName.toUpperCase()} ↗`;
+      chip.title = block.source_url;
+      chip.addEventListener("click", () => {
         chrome.tabs.create({ url: block.source_url });
       });
-      actionsEl.appendChild(btn);
+      providerRow.appendChild(chip);
     }
+    if (providerRow.children.length) actionsEl.appendChild(providerRow);
+  }
+
+  function iconButton(glyph, titleText, onClick) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "detail__icon-btn";
+    btn.textContent = glyph;
+    btn.title = titleText;
+    btn.setAttribute("aria-label", titleText);
+    btn.addEventListener("click", () => onClick(btn));
+    return btn;
+  }
+
+  function openSearchOverride(row, actionsEl, entry) {
+    // Replace the actions row with a small form: title + year + "Suchen".
+    const existing = document.querySelector("#ss-search-override");
+    if (existing) { existing.remove(); return; }
+
+    const form = document.createElement("form");
+    form.id = "ss-search-override";
+    form.className = "detail__search-override";
+
+    const titleInput = document.createElement("input");
+    titleInput.type = "text";
+    titleInput.placeholder = "Alternativer Titel (z.B. Stargate SG-1)";
+    titleInput.value = entry.title || "";
+
+    const yearInput = document.createElement("input");
+    yearInput.type = "number";
+    yearInput.placeholder = "Jahr";
+    yearInput.min = "1900";
+    yearInput.max = "2099";
+    yearInput.value = entry.year || "";
+
+    const submit = document.createElement("button");
+    submit.type = "submit";
+    submit.textContent = "Suchen & Ersetzen";
+
+    form.appendChild(titleInput);
+    form.appendChild(yearInput);
+    form.appendChild(submit);
+
+    form.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      submit.disabled = true;
+      submit.textContent = "…";
+      try {
+        await api.libraryRefresh(row.key, {
+          title: titleInput.value.trim() || undefined,
+          year: yearInput.value ? parseInt(yearInput.value, 10) : undefined,
+          reset: true,
+        });
+        await showDetailModal(row);
+      } catch (err) {
+        submit.textContent = "✕ " + (err.message || "Fehler");
+      }
+    });
+
+    actionsEl.parentElement.insertBefore(form, actionsEl);
+    titleInput.focus();
+    titleInput.select();
   }
 
   function hideDetailModal() {
     const modal = document.querySelector("#ss-detail");
     modal.hidden = true;
     modal.setAttribute("aria-hidden", "true");
+    document.documentElement.classList.remove("ss-detail-open");
+    document.body.classList.remove("ss-detail-open");
+    // Restore the scroll position the user had before opening the modal.
+    window.scrollTo(0, savedScrollY);
   }
 
   function wireDetailModal() {

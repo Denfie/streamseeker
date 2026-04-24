@@ -7,6 +7,101 @@ required CLI version via the `minCliVersion` key in `manifest.json`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.4] — 2026-04-24
+
+### Fixed
+- **Episoden-Tabelle auf s.to wird wieder eingefärbt.** Das neue
+  s.to-Layout (2026+) verzichtet auf das anchor-wrapped Row-Pattern —
+  stattdessen sind Zeilen `<tr class="episode-row" onclick="window.location='/serie/<slug>/staffel-N/episode-M'">`.
+  Das Content-Script iteriert jetzt zusätzlich über
+  `[onclick*="/episode-"]`, liest Season+Episode aus dem `onclick`-Attribut
+  und wrappt die Episoden-Nummer in `.ss-ep-badge`. Andere Spalten
+  (Titel, Hoster, Sprache) bleiben unverändert.
+
+## [0.13.3] — 2026-04-24
+
+### Fixed
+- **s.to-Content-Script wieder funktionsfähig.** s.to hat den URL-Prefix
+  für Serien von `/serie/stream/<slug>` auf `/serie/<slug>` geändert,
+  wodurch `parseLocation()` kein Slug mehr gezogen hat und sämtliche
+  Badges/Icons unsichtbar blieben. Regex akzeptiert jetzt beide Formen
+  (`/serie(?:/stream)?/<slug>`). `STREAM_URL_BUILDERS.sto` im Popup
+  zielt ebenfalls auf das neue Schema.
+
+## [0.13.2] — 2026-04-24
+
+### Fixed
+- **Suche in der Sammlung filterte nicht.** Selber Root-Cause wie beim
+  Detail-Modal in 0.11.1: `.card { display: grid }` hat das
+  `hidden`-Attribut überschrieben, also blieben die Karten sichtbar
+  egal was im Suchfeld stand. Jetzt explizit via
+  `.card[hidden] { display: none !important }` gehidet. Titel + Slug
+  werden ohnehin schon als Needle gematcht (partial, case-insensitive).
+
+## [0.13.1] — 2026-04-24
+
+### Changed
+- **Action-Leiste im Detail-Modal neu gelayoutet** — statt einer langen
+  Knopfreihe jetzt drei Ebenen:
+  1. Großer Primär-Button "Auf … öffnen" (volle Breite).
+  2. Kompakte Icon-Reihe mit `↻ 🔎 🗑` (gleichverteilt, quadratisch).
+  3. Provider-Chips (`TMDB ↗`, `ANILIST ↗`, …) darunter, wrappen bei
+     Bedarf.
+
+## [0.13.0] — 2026-04-24
+
+### Added
+- **Eintrag aus Sammlung entfernen:** Neuer 🗑 Entfernen-Button im
+  Detail-Modal. Löscht via `DELETE /library/{key}` den
+  Sammlungs-Eintrag + Cover-Ordner. Heruntergeladene Videos unter
+  `~/.streamseeker/downloads/` bleiben erhalten (Schutz vor
+  versehentlichem Datenverlust). Bestätigungs-Dialog vor dem Löschen.
+
+### Fixed
+- **Nur das Modal scrollt, nicht mehr der Hintergrund.** `html` + `body`
+  bekommen beim Öffnen `overflow: hidden !important; height: 100%`,
+  sodass der Popup-Content darunter fixiert bleibt. `.detail` selbst
+  scrollt intern (`overflow-y: auto` + `overscroll-behavior: contain`).
+
+## [0.12.0] — 2026-04-24
+
+### Added
+- **Suche anpassen**-Button im Detail-Modal (🔎 Suche). Klick öffnet ein
+  Mini-Formular mit Titel- und Jahr-Input; "Suchen & Ersetzen" triggert
+  `POST /library/{key}/refresh?title=…&year=…&reset=true`, damit man
+  mehrdeutige Slugs (z.B. `stargate` → Stargate SG-1 statt dem 2025er
+  Remake) manuell auf den richtigen Treffer lenken kann.
+- **Gap-Fill in der Detail-Anzeige:** Felder werden jetzt aus *allen*
+  Provider-Blöcken zusammengezogen — fehlt TMDb das Rating aber TVmaze
+  hat eins, wird TVmaze' Rating angezeigt. Reihenfolge TMDb > AniList >
+  OMDb > TVmaze > Jikan; erster nicht-leerer Wert gewinnt pro Feld.
+- **FSK-Circle-Badges in der Sammlung** (0 weiß, 6 gelb, 12 grün, 16
+  blau, 18 rot). Quelle ist der erste Provider-Block mit `fsk`-Feld —
+  in der Praxis kommt das aus TMDb, erfordert also einen TMDb-Key in
+  `~/.streamseeker/config.credentials.json`.
+
+## [0.11.1] — 2026-04-24
+
+### Fixed
+- **Detail-Modal verhält sich jetzt wie ein echter Overlay:** `position: fixed`
+  statt `absolute`, sodass es das Popup immer komplett überdeckt — egal wie
+  weit die Sammlung gescrollt ist. Schließt man das Modal via `×`, kehrt
+  der Scroll an die ursprüngliche Position zurück. Die darunter liegende
+  Liste ist während der Modal-Anzeige gesperrt (`body.ss-detail-open`).
+
+## [0.11.0] — 2026-04-24
+
+### Fixed
+- **Detail-Modal war leer:** `.detail { display: flex }` hat das
+  `hidden`-Attribut überschrieben, sodass das Overlay immer sichtbar und
+  bei Popup-Öffnen leer war. Jetzt explizit via
+  `.detail[hidden] { display: none !important }` gehidet.
+
+### Added
+- **Metadaten-Refresh-Button im Detail-Modal** (`↻ Meta`): triggert
+  `POST /library/{key}/refresh` und lädt die externen Blöcke neu,
+  ohne CLI-Befehl.
+
 ## [0.10.0] — 2026-04-24
 
 ### Added

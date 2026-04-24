@@ -18,9 +18,14 @@ def sandbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("STREAMSEEKER_HOME", str(tmp_path))
     Singleton._instances.pop(DownloadManager, None)
     Singleton._instances.pop(LibraryStore, None)
+    # Library-state cache is process-global; wipe between tests so the
+    # previous test's tmp_path state can't leak into this one.
+    from streamseeker.daemon import server as _server
+    _server._invalidate_library_state_cache()
     yield
     Singleton._instances.pop(DownloadManager, None)
     Singleton._instances.pop(LibraryStore, None)
+    _server._invalidate_library_state_cache()
 
 
 @pytest.fixture

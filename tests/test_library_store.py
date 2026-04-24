@@ -247,12 +247,48 @@ def test_rebuild_index_reconstructs_from_files(sandbox: Path) -> None:
     store.add(KIND_LIBRARY, _entry("aniworldto::oshi-no-ko"))
     store.add(KIND_LIBRARY, _entry("sto::breaking-bad", title="Breaking Bad"))
 
-    # Corrupt the index
+    # Corrupt the index — ``list()`` self-heals from disk rather than
+    # returning the truncated state.
     paths.library_index_file().write_text("not json")
-    assert store.list(KIND_LIBRARY) == []  # reader tolerates, returns empty
+    healed = store.list(KIND_LIBRARY)
+    assert {r["key"] for r in healed} == {"aniworldto::oshi-no-ko", "sto::breaking-bad"}
 
     rows = store.rebuild_index(KIND_LIBRARY)
     assert {r["key"] for r in rows} == {"aniworldto::oshi-no-ko", "sto::breaking-bad"}
+
+
+def test_update_does_not_shrink_index_when_cache_is_truncated(sandbox: Path) -> None:
+    """Regression: a stale/truncated ``index.json`` must not cause the next
+    write to persist the shrunk state. The per-series JSONs on disk are the
+    source of truth and the write must self-heal the index from them first.
+    """
+    store = LibraryStore()
+    store.add(KIND_LIBRARY, _entry("aniworldto::oshi-no-ko"))
+    store.add(KIND_LIBRARY, _entry("sto::breaking-bad", title="Breaking Bad"))
+    store.add(KIND_LIBRARY, _entry("aniworldto::chainsaw-man", title="Chainsaw Man"))
+    assert len(store.list(KIND_LIBRARY)) == 3
+
+    # Simulate a truncated index (e.g. from a crashed write or a race)
+    paths.library_index_file().write_text(json.dumps(
+        [{"key": "sto::breaking-bad", "title": "Breaking Bad", "stream": "sto",
+          "slug": "breaking-bad", "downloaded_count": 0, "total_count": 0}]
+    ))
+
+    # Trigger a write on a DIFFERENT entry — must not wipe the others.
+    store.mark_episode_downloaded("aniworldto::oshi-no-ko", 1, 5)
+
+    rows = store.list(KIND_LIBRARY)
+    assert {r["key"] for r in rows} == {
+        "aniworldto::oshi-no-ko", "sto::breaking-bad", "aniworldto::chainsaw-man"
+    }
+
+
+def test_read_index_missing_file_self_heals(sandbox: Path) -> None:
+    store = LibraryStore()
+    store.add(KIND_LIBRARY, _entry("aniworldto::oshi-no-ko"))
+    paths.library_index_file().unlink()
+    rows = store.list(KIND_LIBRARY)
+    assert len(rows) == 1 and rows[0]["key"] == "aniworldto::oshi-no-ko"
 
 
 # --- concurrency ------------------------------------------------------

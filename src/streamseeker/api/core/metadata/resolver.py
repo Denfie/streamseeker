@@ -67,10 +67,26 @@ class MetadataResolver:
     # Main entry points
     # ------------------------------------------------------------------
 
-    def enrich(self, key: str, *, kind: str = KIND_LIBRARY) -> bool:
+    def enrich(
+        self,
+        key: str,
+        *,
+        kind: str = KIND_LIBRARY,
+        title_override: str | None = None,
+        year_override: int | None = None,
+        reset: bool = False,
+    ) -> bool:
         """Run the provider chain for ``key``. Every provider that returns
         a match contributes its block to ``external``; the main entry
         (title, year) is taken from the **first** provider that hit.
+
+        ``title_override`` / ``year_override`` let a caller steer the
+        search when the stored title/year are ambiguous (e.g. the slug
+        ``"stargate"`` should find SG-1 not the 2025 reboot, so the user
+        can pass ``title_override="Stargate SG-1"``).
+
+        ``reset=True`` drops the previously-stored ``external`` block so
+        stale hits from a previous bad search don't stick around.
 
         Returns True if at least one provider contributed. Never raises —
         upstream failures are logged and swallowed.
@@ -81,8 +97,8 @@ class MetadataResolver:
 
         stream = entry.get("stream") or ""
         slug = entry.get("slug") or ""
-        title = entry.get("title") or slug.replace("-", " ").title()
-        year = entry.get("year")
+        title = title_override or entry.get("title") or slug.replace("-", " ").title()
+        year = year_override if year_override is not None else entry.get("year")
         search_kind = kind_for(stream)
 
         chain = chain_for(stream)
@@ -92,7 +108,7 @@ class MetadataResolver:
 
         patched = dict(entry)
         patched.setdefault("external", {})
-        existing_external = dict(patched.get("external") or {})
+        existing_external = {} if reset else dict(patched.get("external") or {})
 
         primary_applied = False
         any_applied = False

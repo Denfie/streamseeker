@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import threading
+import time
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -110,6 +111,58 @@ def _serve_asset(key: str, filename: str, kind: str = KIND_LIBRARY):
     return FileResponse(asset)
 
 
+_LIBRARY_STATE_CACHE: dict[tuple[str, str], tuple[float, dict]] = {}
+_LIBRARY_STATE_TTL = 2.0  # seconds — fast enough for UI, short enough that
+#                         SSE-driven updates surface within ~2s.
+_LIBRARY_STATE_LOCK = threading.Lock()
+
+
+def _library_state_cached(stream: str, slug: str) -> dict:
+    """TTL-cached wrapper around ``_library_state``.
+
+    Under load — e.g. five ffmpeg workers downloading + post-success
+    enrichment threads hammering the library lock — the raw
+    ``_library_state`` call can block noticeably because it takes the
+    LibraryStore lock + reads queue.json. The content script fires this
+    endpoint right on page load, where a 0.5–3 s delay is painful.
+
+    We cache the result for a couple of seconds. Live transitions still
+    flow via SSE, so the brief staleness is invisible to the user.
+    """
+    key = (stream, slug)
+    now = time.monotonic()
+    with _LIBRARY_STATE_LOCK:
+        cached = _LIBRARY_STATE_CACHE.get(key)
+        if cached and now - cached[0] < _LIBRARY_STATE_TTL:
+            return cached[1]
+
+    value = _library_state(stream, slug)
+
+    with _LIBRARY_STATE_LOCK:
+        _LIBRARY_STATE_CACHE[key] = (now, value)
+        # Opportunistic GC — drop entries that haven't been read in a while.
+        if len(_LIBRARY_STATE_CACHE) > 512:
+            stale_cutoff = now - _LIBRARY_STATE_TTL * 10
+            for k, (ts, _) in list(_LIBRARY_STATE_CACHE.items()):
+                if ts < stale_cutoff:
+                    _LIBRARY_STATE_CACHE.pop(k, None)
+    return value
+
+
+def _invalidate_library_state_cache(stream: str | None = None, slug: str | None = None) -> None:
+    """Drop cached entries when the underlying data changes.
+
+    Called from write paths (``/queue`` mutations, ``/library/mark``,
+    ``/favorites``). If ``stream``/``slug`` aren't provided we just
+    wipe everything — cheap since the cache is small and refills in <5ms.
+    """
+    with _LIBRARY_STATE_LOCK:
+        if stream is None or slug is None:
+            _LIBRARY_STATE_CACHE.clear()
+        else:
+            _LIBRARY_STATE_CACHE.pop((stream, slug), None)
+
+
 def _library_state(stream: str, slug: str) -> dict:
     """Compact status map used by the Chrome extension's content script.
 
@@ -203,6 +256,27 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
         allow_headers=["*"],
     )
+
+    @app.on_event("startup")
+    def _verify_library_index_on_startup() -> None:
+        """Runs before anything else touches the library.
+
+        The per-series JSON files are the source of truth; ``index.json``
+        is a cache. If the cache has drifted from disk (truncated write,
+        multi-process race, corrupt file), rebuild it from disk so clients
+        never see a shrunk library just because the index is stale.
+        """
+        try:
+            store = LibraryStore()
+            disk_count = store._disk_entry_count(KIND_LIBRARY)  # noqa: SLF001
+            index_count = len(store._read_index(KIND_LIBRARY))  # noqa: SLF001
+            if index_count < disk_count:
+                rows = store.rebuild_index(KIND_LIBRARY)
+                logger.info(
+                    f"library index rebuilt on startup: {index_count} → {len(rows)} entries"
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"library index verification failed: {exc}")
 
     @app.on_event("startup")
     def _migrate_favorites_on_startup() -> None:
@@ -384,6 +458,7 @@ def create_app() -> FastAPI:
             logger.exception(f"enqueue failed for {req.stream}::{req.slug}: {exc}")
             raise HTTPException(status_code=500, detail=f"enqueue failed: {exc}") from exc
 
+        _invalidate_library_state_cache(req.stream, req.slug)
         return {"enqueued": True, "count": count}
 
     def _require_queue_item(file_name: str) -> dict:
@@ -396,24 +471,28 @@ def create_app() -> FastAPI:
     def queue_pause(file_name: str) -> dict:
         _require_queue_item(file_name)
         DownloadManager().mark_status(file_name, "paused")
+        _invalidate_library_state_cache()
         return {"file_name": file_name, "status": "paused"}
 
     @app.post("/queue/{file_name:path}/resume")
     def queue_resume(file_name: str) -> dict:
         _require_queue_item(file_name)
         DownloadManager().mark_status(file_name, "pending", attempts=0, last_error=None)
+        _invalidate_library_state_cache()
         return {"file_name": file_name, "status": "pending"}
 
     @app.post("/queue/{file_name:path}/retry")
     def queue_retry(file_name: str) -> dict:
         _require_queue_item(file_name)
         DownloadManager().mark_status(file_name, "pending", attempts=0, last_error=None)
+        _invalidate_library_state_cache()
         return {"file_name": file_name, "status": "pending"}
 
     @app.delete("/queue/{file_name:path}")
     def queue_delete(file_name: str) -> dict:
         _require_queue_item(file_name)
         DownloadManager()._remove_from_queue(file_name)
+        _invalidate_library_state_cache()
         return {"removed": True, "file_name": file_name}
 
     # -----------------------------------------------------------------
@@ -465,7 +544,7 @@ def create_app() -> FastAPI:
 
     @app.get("/library/state")
     def library_state(stream: str, slug: str) -> dict:
-        return _library_state(stream, slug)
+        return _library_state_cached(stream, slug)
 
     @app.get("/library/{key:path}/poster")
     def library_poster(key: str):
@@ -553,14 +632,31 @@ def create_app() -> FastAPI:
             logger.exception(f"mark failed for {key}: {exc}")
             raise HTTPException(status_code=500, detail=f"mark failed: {exc}") from exc
 
+        _invalidate_library_state_cache(req.stream, req.slug)
         return {"marked": marked, "key": key}
 
     @app.post("/library/{key:path}/refresh")
-    def library_refresh(key: str) -> dict:
+    def library_refresh(
+        key: str,
+        title: Optional[str] = None,
+        year: Optional[int] = None,
+        reset: bool = False,
+    ) -> dict:
+        """Re-run the provider chain for ``key``.
+
+        Query params let the caller steer an ambiguous search —
+        e.g. ``?title=Stargate%20SG-1&year=1997&reset=true`` to replace
+        the previous "Stargate 2025" match.
+        """
         entry = LibraryStore().get(KIND_LIBRARY, key)
         if entry is None:
             raise HTTPException(status_code=404, detail=f"not in library: {key}")
-        applied = MetadataResolver().enrich(key)
+        applied = MetadataResolver().enrich(
+            key,
+            title_override=title,
+            year_override=year,
+            reset=reset,
+        )
         return {"refreshed": applied, "key": key}
 
     @app.get("/library/{key:path}")
@@ -569,6 +665,17 @@ def create_app() -> FastAPI:
         if entry is None:
             raise HTTPException(status_code=404, detail=f"not in library: {key}")
         return entry
+
+    @app.delete("/library/{key:path}")
+    def library_delete(key: str) -> dict:
+        """Remove a library entry + its asset folder (poster, backdrop).
+        Does **not** touch downloaded media files in ``~/.streamseeker/downloads/``.
+        """
+        removed = LibraryStore().remove(KIND_LIBRARY, key)
+        if not removed:
+            raise HTTPException(status_code=404, detail=f"not in library: {key}")
+        _invalidate_library_state_cache()
+        return {"removed": True, "key": key}
 
     # -----------------------------------------------------------------
     # Favorites — now a flag on library entries, not a separate store.
@@ -586,6 +693,7 @@ def create_app() -> FastAPI:
         threading.Thread(
             target=_safe_enrich, args=(key, KIND_LIBRARY), daemon=True
         ).start()
+        _invalidate_library_state_cache(req.stream, req.slug)
         return entry
 
     @app.get("/favorites/{key:path}/poster")
@@ -611,6 +719,7 @@ def create_app() -> FastAPI:
         if entry is None or not entry.get("favorite"):
             raise HTTPException(status_code=404, detail=f"no favorite: {key}")
         store.set_favorite(key, False)
+        _invalidate_library_state_cache()
         return {"removed": True, "key": key}
 
     @app.post("/favorites/{key:path}/promote")

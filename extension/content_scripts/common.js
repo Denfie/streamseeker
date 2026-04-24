@@ -338,6 +338,44 @@
           }
         }
       }
+
+      // s.to (2026+ layout) no longer wraps episode rows in an anchor —
+      // rows are <tr class="episode-row" onclick="window.location='…'">.
+      // Pick them up via the onclick attribute and tint only the
+      // episode-number cell so title/hoster columns stay untouched.
+      for (const row of document.querySelectorAll('[onclick*="/episode-"]')) {
+        const onclick = row.getAttribute("onclick") || "";
+        const m = onclick.match(/\/episode-(\d+)/);
+        if (!m) continue;
+        const seasonMatch = onclick.match(/\/staffel-(\d+)\//);
+        const seasonKey = (seasonMatch && seasonMatch[1]) || currentSeasonKey;
+        if (!seasonKey) continue;
+        const s = seasons[seasonKey] || { episodes: {} };
+        const epStatus = (s.episodes || {})[m[1]];
+        if (!epStatus) continue;
+
+        // Preferred tint target: the dedicated number cell if the site
+        // provides one; otherwise the first <th> or <td> of the row.
+        const numCell =
+          row.querySelector(".episode-number-cell") ||
+          row.querySelector("th, td");
+        if (!numCell) continue;
+
+        const walker = document.createTreeWalker(numCell, NodeFilter.SHOW_TEXT);
+        let node;
+        while ((node = walker.nextNode())) {
+          const text = node.textContent.trim();
+          if (!text) continue;
+          if (LABEL_RE.test(text)) {
+            const badge = document.createElement("span");
+            badge.className = "ss-ep-badge";
+            badge.setAttribute("data-ss-state", epStatus);
+            node.parentNode.insertBefore(badge, node);
+            badge.appendChild(node);
+            break;
+          }
+        }
+      }
     }
   }
 

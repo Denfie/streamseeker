@@ -421,20 +421,47 @@ class LibraryStore(metaclass=Singleton):
     def _read_index(cls, kind: str) -> list[dict]:
         file = cls._index_file(kind)
         if not file.is_file():
-            return []
+            return cls._rebuild_index(kind)
         try:
             data = json.loads(file.read_text())
-            return data if isinstance(data, list) else []
+            if not isinstance(data, list):
+                return cls._rebuild_index(kind)
+            return data
         except (json.JSONDecodeError, OSError):
-            return []
+            return cls._rebuild_index(kind)
 
     @classmethod
     def _write_index(cls, kind: str, rows: list[dict]) -> None:
         _atomic_write_json(cls._index_file(kind), rows)
 
     @classmethod
+    def _disk_entry_count(cls, kind: str) -> int:
+        """Count per-series JSON files on disk — cheap, no parse."""
+        root = paths.library_dir() if kind == KIND_LIBRARY else paths.favorites_dir()
+        if not root.is_dir():
+            return 0
+        return sum(
+            1 for stream in root.iterdir() if stream.is_dir() for _ in stream.glob("*.json")
+        )
+
+    @classmethod
+    def _self_heal(cls, kind: str, rows: list[dict]) -> list[dict]:
+        """Rebuild the index from disk whenever the cache is shorter than
+        the set of on-disk per-series JSONs.
+
+        Per-series files are the single source of truth; the index is a
+        cache. If a truncated or empty index is read (e.g. after an
+        interrupted write or a multi-process race), self-heal before any
+        write so we never persist the shrunk state back to disk.
+        """
+        disk_count = cls._disk_entry_count(kind)
+        if len(rows) < disk_count:
+            return cls._rebuild_index(kind)
+        return rows
+
+    @classmethod
     def _update_index_row(cls, kind: str, entry: dict) -> None:
-        rows = cls._read_index(kind)
+        rows = cls._self_heal(kind, cls._read_index(kind))
         row = cls._index_row(entry)
         for i, existing in enumerate(rows):
             if existing.get("key") == row["key"]:
@@ -446,7 +473,8 @@ class LibraryStore(metaclass=Singleton):
 
     @classmethod
     def _remove_index_row(cls, kind: str, key: str) -> None:
-        rows = [r for r in cls._read_index(kind) if r.get("key") != key]
+        rows = cls._self_heal(kind, cls._read_index(kind))
+        rows = [r for r in rows if r.get("key") != key]
         cls._write_index(kind, rows)
 
     @staticmethod
@@ -456,6 +484,18 @@ class LibraryStore(metaclass=Singleton):
         downloaded = sum(len(s.get("downloaded", [])) for s in seasons.values())
         downloaded += len(movies.get("downloaded", []))
         total = sum(s.get("episode_count", 0) for s in seasons.values())
+        # Pull FSK/rating from any provider block so cards can render
+        # them without loading the full entry. First provider with a
+        # value wins.
+        fsk = None
+        rating = None
+        for block in (entry.get("external") or {}).values():
+            if fsk is None and block.get("fsk"):
+                fsk = block["fsk"]
+            if rating is None and block.get("rating"):
+                rating = block["rating"]
+            if fsk and rating:
+                break
         return {
             "key": entry["key"],
             "title": entry.get("title"),
@@ -467,6 +507,8 @@ class LibraryStore(metaclass=Singleton):
             "has_updates": bool(entry.get("pending_updates")),
             "downloaded_count": downloaded,
             "total_count": total,
+            "fsk": fsk,
+            "rating": rating,
         }
 
     @classmethod

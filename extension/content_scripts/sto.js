@@ -6,7 +6,10 @@
     stream: "sto",
 
     parseLocation() {
-      const m = location.pathname.match(/^\/serie\/stream\/([^/]+)/);
+      // s.to migrated from `/serie/stream/<slug>` to `/serie/<slug>` in
+      // April 2026 — accept both forms for a few versions so older deep
+      // links still work.
+      const m = location.pathname.match(/^\/serie(?:\/stream)?\/([^/]+)/);
       if (!m) return null;
       const filmMatch = location.pathname.match(/\/filme\/film-(\d+)/);
       return {
