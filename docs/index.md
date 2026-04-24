@@ -1,17 +1,24 @@
-![Streamseeker usage](https://raw.githubusercontent.com/denfie/streamseeker/master/assets/usage-v-0-1-2.gif)
+![Streamseeker usage](https://raw.githubusercontent.com/Denfie/streamseeker/master/assets/usage-v-0-1-2.gif)
 
-### poetry issues
+### venv cheat sheet
 
-`python -m venv .venv --copies` creates a virtual environment with copies of the system packages. Poetry does not support this feature. If you encounter an error like `ERROR: Error: Command '['/home/runner/work/streamseeker/streamseeker/.venv/bin/python3', '-Im', 'ensurepip', '--upgrade', '--default-pip']' returned non-zero exit status 1.` you can create a virtual environment without copies by running `python -m venv .venv` instead.
+StreamSeeker setzt Standard-`pip` + `venv` voraus, kein Poetry mehr.
 
 ```bash
-# Enter the current Poetry environment
-poetry shell
+# Dev-venv aufsetzen
+python3 -m venv .venv
+source .venv/bin/activate           # Linux / macOS
+# .\.venv\Scripts\activate          # Windows
 
-# Remove the current environment
-# as referred by path to Python interpreter
-poetry env remove $(which python)
+# Paket + Test-Deps editable installieren
+pip install -e '.[dev]'
 
-# Reinstall from Poetry's cache
-poetry install
+# Umgebung abschießen
+deactivate
+rm -rf .venv
 ```
+
+Troubleshooting: falls `python -m venv .venv` mit einem
+`ensurepip`-Fehler abbricht, ist meist eine Python-Kern-Installation
+ohne `ensurepip` die Ursache (bei Debian-basierten Distros oft als
+separates `python3-venv`-Paket nachzuinstallieren).

@@ -10,6 +10,17 @@ The browser extension is released independently; see `extension/CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Changed
+- **Poetry raus, PEP 621 rein.** `pyproject.toml` nutzt jetzt den
+  Standard-`[project]`-Table; Build-Backend ist `hatchling`. `poetry.lock`
+  und alle `poetry`/`poetry-core`-Referenzen sind weg. Install jetzt via
+  `pipx install git+https://github.com/Denfie/streamseeker.git` (End-
+  User) oder `pip install -e '.[dev]'` aus einem Checkout (Dev).
+  `Makefile`-Targets arbeiten ohne `poetry run` direkt mit
+  `python -m streamseeker` / `pytest`. `docs/index.md` mit venv-Cheatsheet
+  statt Poetry-Troubleshooting. `get_version()`-Fallback liest jetzt
+  `[project].version` (mit Legacy-`[tool.poetry]`-Fallback).
+
 ### Fixed
 - **pipx-Install funktioniert jetzt.** `get_version()` hat vorher
   `pyproject.toml` aus einem relativen Checkout-Pfad gelesen und in

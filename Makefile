@@ -1,6 +1,8 @@
-.PHONY: run help about download retry version install test clean icons install-extension install-desktop-icon uninstall daemon-start daemon-stop
+.PHONY: run help about download retry version install install-dev test clean icons install-extension install-desktop-icon uninstall daemon-start daemon-stop
 
-CLI = poetry run python -m streamseeker
+# Use the Python from the active virtualenv (if any) otherwise system python3.
+PY ?= python3
+CLI = $(PY) -m streamseeker
 
 ## Application commands
 run:
@@ -12,21 +14,21 @@ help:
 about:
 	$(CLI) about
 
-download:
-	$(CLI) download
+version:
+	$(CLI) --version
 
 retry:
 	$(CLI) retry
 
-version:
-	$(CLI) --version
-
 ## Development commands
 install:
-	poetry install
+	$(PY) -m pip install -e .
+
+install-dev:
+	$(PY) -m pip install -e '.[dev]'
 
 test:
-	poetry run pytest
+	$(PY) -m pytest
 
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; true
@@ -34,7 +36,7 @@ clean:
 
 ## Distribution (Paket H)
 icons:
-	poetry run python scripts/render_icons.py
+	$(PY) scripts/render_icons.py
 
 install-extension:
 	$(CLI) install-extension

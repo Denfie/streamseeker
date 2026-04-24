@@ -75,6 +75,11 @@ def get_version() -> str:
         pyproject_path = Path(__file__).resolve().parents[3] / "pyproject.toml"
         with open(pyproject_path, "rb") as f:
             data = tomllib.load(f)
+        # PEP 621 ``[project]``; keep legacy ``[tool.poetry]`` fallback so
+        # an older local checkout still boots.
+        project = data.get("project") or {}
+        if project.get("version"):
+            return project["version"]
         return data["tool"]["poetry"]["version"]
     except (FileNotFoundError, KeyError, OSError):
         return "0.0.0+unknown"

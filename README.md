@@ -45,35 +45,16 @@ StreamSeeker besteht aus drei Teilen:
   - macOS: `brew install ffmpeg`
   - Linux: `apt install ffmpeg` (oder Äquivalent)
   - Windows: `winget install Gyan.FFmpeg`
-- **[Poetry](https://python-poetry.org/docs/#installation)** für Dependency-Management
+
+Kein Poetry mehr nötig — das Paket ist PEP 621-konform und installiert
+sich mit Standard-`pip` bzw. `pipx`.
 
 ### StreamSeeker benutzen
 
-Drei Wege: **ohne Install direkt aus dem Checkout**, **pipx** für
-systemweite Installation, oder **Poetry** für Entwickler. Nichts davon
-schließt sich aus — wenn du schon einen Poetry-Workflow hast, bleibt er
-funktionstüchtig.
+Zwei Wege: **pipx** (empfohlen, Launcher auf dem `PATH`) oder
+**editable `pip install`** für Entwickler.
 
-#### Variante 0 — Ohne Install aus einem Checkout
-
-Wenn du nicht global installieren willst (oder StreamSeeker erstmal nur
-probieren):
-
-```bash
-git clone https://github.com/denfie/streamseeker.git
-cd streamseeker
-python -m pip install -r <(poetry export --without-hashes -f requirements.txt)
-python -m streamseeker run
-python -m streamseeker daemon start
-```
-
-Vorteil: kein `pipx`, kein globaler Launcher. Nachteil: du musst
-`python -m streamseeker …` ausführen und im Checkout-Verzeichnis sein
-(oder den Pfad im Autostart absolut angeben). Für Autostart über
-systemd/launchd ist die pipx-Variante praktischer, weil dort ein
-`streamseeker`-Launcher auf dem `PATH` liegt.
-
-#### Variante A — pipx (empfohlen für Endnutzer)
+#### Variante A — pipx (empfohlen)
 
 [pipx](https://pypa.github.io/pipx/) installiert CLI-Tools in isolierten
 Virtualenvs und legt einen Launcher auf den `PATH`. Einmal installiert
@@ -86,7 +67,7 @@ brew install pipx           # macOS
 # oder: apt install pipx    # Ubuntu 23.04+
 
 # StreamSeeker aus dem Git-Repo installieren (ohne Checkout)
-pipx install git+https://github.com/denfie/streamseeker.git
+pipx install git+https://github.com/Denfie/streamseeker.git
 
 # Update auf die neueste Version
 pipx upgrade streamseeker
@@ -95,27 +76,36 @@ pipx upgrade streamseeker
 Alternativ aus einem lokalen Checkout:
 
 ```bash
-git clone https://github.com/denfie/streamseeker.git
+git clone https://github.com/Denfie/streamseeker.git
 pipx install ./streamseeker
 ```
 
-Nach der Installation ist `streamseeker` auf dem `PATH` — **keine
-`poetry shell`-Session nötig**.
+Nach der Installation ist `streamseeker` auf dem `PATH`. Fertig.
 
-#### Variante B — Poetry (für Entwickler & bestehende Setups)
+#### Variante B — Editable pip install (für Entwickler)
 
-Nur relevant, wenn du am Code arbeiten oder Tests laufen lassen willst.
+Wenn du am Code arbeiten oder Tests laufen lassen willst: Klonen, venv
+erstellen, editable installieren.
 
 ```bash
-git clone https://github.com/denfie/streamseeker.git
+git clone https://github.com/Denfie/streamseeker.git
 cd streamseeker
-poetry install
-poetry shell               # aktiviert das dev-venv
+python3 -m venv .venv
+source .venv/bin/activate               # Linux / macOS
+# .\.venv\Scripts\activate              # Windows
+
+pip install -e '.[dev]'                 # Runtime + Test-Deps
+pytest                                  # Tests
+streamseeker daemon start               # CLI läuft direkt
 ```
 
-Innerhalb der `poetry shell` steht `streamseeker` zur Verfügung. Ohne
-`poetry shell` kannst du jeden Befehl auch via `poetry run streamseeker …`
-aufrufen.
+Das Repository hat auch einen `Makefile` als Komfort-Wrapper:
+
+```bash
+make install-dev     # pip install -e '.[dev]'
+make test            # pytest
+make daemon-start    # streamseeker daemon start
+```
 
 ### Datenablage
 
