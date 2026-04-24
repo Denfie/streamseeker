@@ -1,8 +1,8 @@
 import json
-import os
 import time
 from datetime import datetime, timezone
 
+from streamseeker import paths
 from streamseeker.api.core.classes.base_class import BaseClass
 
 from streamseeker.api.core.exceptions import ProviderError, LanguageError, DownloadExistsError, LinkUrlError
@@ -15,8 +15,6 @@ from streamseeker.api.core.logger import Logger
 logger = Logger().instance()
 
 class StreamseekerHandler(BaseClass):
-    CONFIG_FILE = "config.json"
-
     DEFAULTS = {
         "preferred_provider": "voe",
         "output_folder": "downloads",
@@ -42,17 +40,20 @@ class StreamseekerHandler(BaseClass):
         self.config.update(file_config)
         self.config.update({k: v for k, v in config.items() if v is not None})
 
+        # Resolve output_folder against ~/.streamseeker/ so streams get an absolute path.
+        # Keeps the config value user-friendly (relative "downloads") but the runtime
+        # value unambiguous regardless of CWD.
+        self.config["output_folder"] = str(paths.downloads_dir())
+
     @classmethod
     def _load_config_file(cls) -> dict:
-        if not os.path.isfile(cls.CONFIG_FILE):
+        config_file = paths.config_file()
+        if not config_file.is_file():
             return {}
         try:
-            with open(cls.CONFIG_FILE, "r") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, IOError):
+            return json.loads(config_file.read_text())
+        except (json.JSONDecodeError, OSError):
             return {}
-
-        self.ddos_counter = 0
 
     def streams(self):
         streams = self._streams.get_all()
@@ -201,7 +202,34 @@ class StreamseekerHandler(BaseClass):
             "added_at": datetime.now(timezone.utc).astimezone().isoformat(),
         }
         self._manager.register_retry_context(file_name, context)
-        self._manager.enqueue(context)
+        self._enqueue_item(context)
+
+    def _enqueue_item(self, item: dict) -> None:
+        """Route an enqueue to the daemon (if alive) or to the local manager.
+
+        Single-writer rule: when the daemon runs, it must be the only process
+        writing to ``download_queue.json``. CLI-side calls therefore delegate
+        over HTTP. If the daemon is unreachable, we fall back to a direct local
+        enqueue so the CLI keeps working standalone.
+        """
+        from streamseeker.api.core import daemon_client
+
+        if daemon_client.is_daemon_running():
+            try:
+                daemon_client.queue_add(
+                    stream=item.get("stream_name", ""),
+                    slug=item.get("name", ""),
+                    type=item.get("type", "staffel"),
+                    season=int(item.get("season") or 0),
+                    episode=int(item.get("episode") or 0),
+                    language=item.get("language", "german"),
+                    preferred_provider=item.get("preferred_provider"),
+                    file_name=item.get("file_name"),
+                )
+                return
+            except Exception as exc:
+                logger.warning(f"daemon enqueue failed, falling back to local: {exc}")
+        self._manager.enqueue(item)
 
     def enqueue_all(self, stream_name: str, preferred_provider: str, name: str, language: str, type: str, season: int = 0, episode: int = 0, seasons_list: list[int] = None, episodes_list: list[int] = None) -> int:
         """Enqueue all episodes from the given season/episode onwards. No downloads started.
@@ -246,7 +274,7 @@ class StreamseekerHandler(BaseClass):
                     "file_name": file_path,
                     "added_at": datetime.now(timezone.utc).astimezone().isoformat(),
                 }
-                self._manager.enqueue(item)
+                self._enqueue_item(item)
                 count += 1
 
             episode = 0
@@ -272,5 +300,5 @@ class StreamseekerHandler(BaseClass):
             "file_name": file_path,
             "added_at": datetime.now(timezone.utc).astimezone().isoformat(),
         }
-        self._manager.enqueue(item)
+        self._enqueue_item(item)
         return 1

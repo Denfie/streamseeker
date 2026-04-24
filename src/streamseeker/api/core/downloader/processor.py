@@ -74,15 +74,20 @@ class QueueProcessor(metaclass=Singleton):
             time.sleep(0.5)
 
     def _process_loop(self) -> None:
-        """Main processing loop — pulls items and starts parallel downloads."""
+        """Main processing loop — pulls items and starts parallel downloads.
+
+        Idles (doesn't exit) when the queue drains so the daemon can pick up
+        items enqueued later. Use ``stop()`` to terminate cleanly.
+        """
         while not self._stop_event.is_set():
             item = self._manager.get_next_pending()
             if item is None:
-                # Wait for active downloads to finish, then check again
-                if self._active_count() > 0:
-                    time.sleep(1)
-                    continue
-                break
+                # Queue empty — wait briefly and poll again. This keeps the
+                # thread alive for items added to the queue after the first
+                # drain (e.g. via the browser extension's overlay).
+                if self._stop_event.wait(2.0):
+                    break
+                continue
 
             # Wait for a free slot
             self._wait_for_slot()

@@ -344,9 +344,7 @@ Version: <fg=cyan>{__version__}</>
         """Render the download view flicker-free by overwriting lines in place."""
         import re as _re
 
-        summary = manager.queue_summary()
-        progress = manager.get_progress()
-        queue = manager.get_queue()
+        summary, progress, queue = self._view_data(manager)
 
         # Build all lines first
         lines: list[str] = []
@@ -372,29 +370,43 @@ Version: <fg=cyan>{__version__}</>
             s = item.get("status", "pending")
             by_status.setdefault(s, []).append(item)
 
-        status_labels = {
-            "downloading": ("\033[33m\u2b07 Downloading\033[0m", ""),
-            "pending":     ("\033[37m\u23f3 Pending\033[0m", ""),
-            "failed":      ("\033[31m\u274c Failed\033[0m", "last_error"),
-            "skipped":     ("\033[90m\u23ed Skipped\033[0m", "skip_reason"),
-            "paused":      ("\033[34m\u23f8 Paused\033[0m", "skip_reason"),
-            "completed":   ("\033[32m\u2705 Completed\033[0m", ""),
-        }
+        # Status config: (label, detail_key, grouped)
+        # grouped=True: collapse items by series name \u2192 "Series Title (count)"
+        # grouped=False: list each item individually (with optional detail)
+        status_labels = [
+            ("downloading", "\033[33m\u2b07 Downloading\033[0m", "", True),
+            ("pending",     "\033[37m\u23f3 Pending\033[0m",     "", True),
+            ("failed",      "\033[31m\u274c Failed\033[0m",      "last_error", False),
+            ("skipped",     "\033[90m\u23ed Skipped\033[0m",     "skip_reason", True),
+            ("paused",      "\033[34m\u23f8 Paused\033[0m",      "skip_reason", True),
+            ("completed",   "\033[32m\u2705 Completed\033[0m",   "", True),
+        ]
 
-        for status_key, (label, detail_key) in status_labels.items():
+        max_detail_rows = 5  # cap per ungrouped status to prevent overflow
+
+        for status_key, label, detail_key, grouped in status_labels:
             items = by_status.get(status_key, [])
             if not items:
                 continue
             lines.append(f"{label} ({len(items)}):")
-            for item in items:
-                name = os.path.basename(item.get("file_name", "unknown"))
-                detail = ""
-                if detail_key and item.get(detail_key):
-                    raw = str(item.get(detail_key, ""))
-                    detail = f" \u2014 {_re.sub(r'<[^>]+>', '', raw)}"
-                attempts = item.get("attempts", 0)
-                suffix = f" (x{attempts})" if attempts > 0 else ""
-                lines.append(f"  {name}{suffix}{detail}")
+
+            if grouped:
+                for title, count in self._group_by_series(items):
+                    suffix = f" ({count})" if count > 1 else ""
+                    lines.append(f"  {title}{suffix}")
+            else:
+                for item in items[:max_detail_rows]:
+                    name = os.path.basename(item.get("file_name", "unknown"))
+                    detail = ""
+                    if detail_key and item.get(detail_key):
+                        raw = str(item.get(detail_key, ""))
+                        detail = f" \u2014 {_re.sub(r'<[^>]+>', '', raw)}"
+                    attempts = item.get("attempts", 0)
+                    attempt_suffix = f" (x{attempts})" if attempts > 0 else ""
+                    lines.append(f"  {name}{attempt_suffix}{detail}")
+                remaining = len(items) - max_detail_rows
+                if remaining > 0:
+                    lines.append(f"  \033[90m\u2026 and {remaining} more\033[0m")
             lines.append("")
 
         lines.append("\033[90m[m] Menu  [q] Quit\033[0m")
@@ -427,6 +439,45 @@ Version: <fg=cyan>{__version__}</>
             return f"{name}: [{bar}] {pct:5.1f}%  {n:.0f}/{total:.0f}s"
         else:
             return f"{name}: [{bar}] {pct:5.1f}%"
+
+    def _view_data(self, manager: DownloadManager) -> tuple[dict, list, list]:
+        """Return (summary, progress, queue) for the render loop.
+
+        Poll the daemon when it's alive, else read the local manager directly.
+        Polling happens each render tick (~333ms); for a localhost endpoint
+        that's cheap enough, and we dodge SSE plumbing inside a terminal
+        non-blocking loop.
+        """
+        from streamseeker.api.core import daemon_client
+
+        if daemon_client.is_daemon_running():
+            try:
+                status = daemon_client.status()
+                queue = daemon_client.queue_list()
+                return status.get("summary", {}), status.get("progress", []), queue
+            except Exception:
+                # One-off hiccup — fall through to local read
+                pass
+        return manager.queue_summary(), manager.get_progress(), manager.get_queue()
+
+    @staticmethod
+    def _group_by_series(items: list[dict]) -> list[tuple[str, int]]:
+        """Group queue items by series name, preserving first-seen order.
+
+        Returns a list of (display_title, count) tuples. The title is derived
+        from the item's ``name`` field (slug) and prettified for display.
+        """
+        order: list[str] = []
+        counts: dict[str, int] = {}
+        titles: dict[str, str] = {}
+        for item in items:
+            slug = item.get("name") or os.path.splitext(os.path.basename(item.get("file_name", "unknown")))[0]
+            if slug not in counts:
+                order.append(slug)
+                counts[slug] = 0
+                titles[slug] = slug.replace("-", " ").replace("_", " ").strip().title() or slug
+            counts[slug] += 1
+        return [(titles[s], counts[s]) for s in order]
 
     @staticmethod
     def _format_bytes(b: float) -> str:

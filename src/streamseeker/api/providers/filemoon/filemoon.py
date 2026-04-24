@@ -1,5 +1,4 @@
 import json
-import os
 import re
 import time
 from datetime import datetime, timezone
@@ -7,6 +6,7 @@ from datetime import datetime, timezone
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 
+from streamseeker import paths
 from streamseeker.api.core.exceptions import CacheUrlError
 from streamseeker.api.providers.provider_base import ProviderBase
 from streamseeker.api.core.downloader.ffmpeg import DownloaderFFmpeg
@@ -19,8 +19,6 @@ class FilemoonProvider(ProviderBase):
     name = "filemoon"
     title = "Filemoon"
     priority = 45  # Experimental — Filemoon uses Vite SPA, extraction unreliable
-
-    DEBUG_FILE = os.path.join("logs", "filemoon_debug.json")
 
     # Patterns to extract m3u8 URL from page source after JS execution
     _URL_PATTERNS = [
@@ -154,15 +152,14 @@ class FilemoonProvider(ProviderBase):
     def _save_debug(self, info: dict) -> None:
         """Save debug info to help analyze Filemoon's structure."""
         try:
+            debug_file = paths.filemoon_debug_file()
             existing = []
-            if os.path.isfile(self.DEBUG_FILE):
-                with open(self.DEBUG_FILE, "r") as f:
-                    existing = json.load(f)
+            if debug_file.is_file():
+                existing = json.loads(debug_file.read_text())
             # Keep last 20 entries
             existing.append(info)
             existing = existing[-20:]
-            os.makedirs(os.path.dirname(self.DEBUG_FILE), exist_ok=True)
-            with open(self.DEBUG_FILE, "w") as f:
-                json.dump(existing, f, indent=2, ensure_ascii=False)
+            debug_file.parent.mkdir(parents=True, exist_ok=True)
+            debug_file.write_text(json.dumps(existing, indent=2, ensure_ascii=False))
         except Exception:
             pass

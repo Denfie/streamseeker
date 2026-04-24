@@ -2,7 +2,7 @@
 Tests for DownloadManager queue operations.
 
 The DownloadManager uses a Singleton metaclass, so each test resets the singleton
-instance and redirects QUEUE_FILE to a temporary path to ensure full isolation.
+instance and points STREAMSEEKER_HOME at a temp dir to ensure full isolation.
 """
 
 import json
@@ -19,10 +19,10 @@ def _reset_singleton(cls):
 
 
 @pytest.fixture(autouse=True)
-def isolated_manager(tmp_path):
+def isolated_manager(tmp_path, monkeypatch):
     """
     Before each test:
-      - Point DownloadManager.QUEUE_FILE at a temp file so no real log dir is touched.
+      - Point STREAMSEEKER_HOME at a temp dir so no real user data is touched.
       - Clear the singleton instance so __init__ runs fresh.
 
     After each test:
@@ -30,8 +30,7 @@ def isolated_manager(tmp_path):
     """
     from streamseeker.api.core.downloader.manager import DownloadManager
 
-    queue_file = str(tmp_path / "download_queue.json")
-    DownloadManager.QUEUE_FILE = queue_file
+    monkeypatch.setenv("STREAMSEEKER_HOME", str(tmp_path))
     _reset_singleton(DownloadManager)
 
     yield
@@ -219,23 +218,20 @@ def test_get_pending_items():
 # Persistence test
 # ---------------------------------------------------------------------------
 
-def test_queue_persistence(tmp_path):
+def test_queue_persistence():
     """
     Enqueue items via one manager instance, then create a fresh singleton and
     verify the queue data is still there (loaded from the JSON file).
     """
     from streamseeker.api.core.downloader.manager import DownloadManager
 
-    queue_file = str(tmp_path / "persist_queue.json")
-    DownloadManager.QUEUE_FILE = queue_file
     _reset_singleton(DownloadManager)
-
     m1 = DownloadManager()
     m1.enqueue(make_item("persist.mp4"))
 
-    # Destroy the singleton so a new instance is created from scratch
+    # Destroy the singleton so a new instance is created from scratch —
+    # STREAMSEEKER_HOME stays the same (set by the autouse fixture).
     _reset_singleton(DownloadManager)
-    DownloadManager.QUEUE_FILE = queue_file  # keep same file
 
     m2 = DownloadManager()
     queue = m2.get_queue()

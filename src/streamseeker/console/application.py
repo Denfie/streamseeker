@@ -35,8 +35,15 @@ if TYPE_CHECKING:
 def load_command(name: str) -> Callable[[], Command]:
     def _load() -> Command:
         words = name.split(" ")
-        module = import_module("streamseeker.console.commands." + ".".join(words))
-        command_class = getattr(module, "".join(c.title() for c in words) + "Command")
+        # Python modules cannot contain hyphens; translate them to underscores
+        # for the on-disk module name but preserve hyphens in the class name
+        # (TitleCased, e.g. "install-autostart" -> "InstallAutostart").
+        module_parts = [w.replace("-", "_") for w in words]
+        module = import_module("streamseeker.console.commands." + ".".join(module_parts))
+        class_name = "".join(
+            "".join(segment.title() for segment in w.split("-")) for w in words
+        ) + "Command"
+        command_class = getattr(module, class_name)
         command: Command = command_class()
         return command
 
@@ -47,6 +54,32 @@ COMMANDS = [
     "run",
     "download",
     "retry",
+    "migrate",
+    "favorite add",
+    "favorite remove",
+    "favorite list",
+    "favorite search",
+    "favorite promote",
+    "favorite refresh",
+    "library list",
+    "library search",
+    "library show",
+    "library stats",
+    "library remove",
+    "library refresh",
+    "library rescan",
+    "daemon start",
+    "daemon stop",
+    "daemon restart",
+    "daemon status",
+    "daemon logs",
+    "daemon install-autostart",
+    "daemon uninstall-autostart",
+    "install-extension",
+    "uninstall-extension",
+    "install-desktop-icon",
+    "uninstall-desktop-icon",
+    "uninstall",
     # "search",
     # "version",
 ]

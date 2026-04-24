@@ -1,33 +1,24 @@
-[tool.streamseeker]
+[tool.poetry]
 name = "streamseeker"
-version = "0.1.5"
-authors = [
-  { name="Dennis Fiedler", email="dennis.fiedler@uniprank.com" },
-]
-description = "Stream download helper to download files from the internet"
+version = "0.2.0"
+description = "Helping package to download files from different streaming platforms"
+authors = ["Dennis Fiedler <dennis.fiedler@uniprank.com>"]
+license = "MIT"
 readme = "README.md"
-requires-python = ">=3.11"
+homepage = "https://github.com/uniprank/streamseeker"
+repository = "https://github.com/uniprank/streamseeker"
+packages = [{ include = "streamseeker", from = "src" }]
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
 
-[metadata]
-version = "0.1.5"
-
-[project.urls]
-Homepage = "https://github.com/uniprank/streamseeker"
+[tool.poetry.urls]
 Issues = "https://github.com/uniprank/streamseeker/issues"
 
-[tool.poetry]
-name = "streamseeker"
-version = "0.1.5"
-description = "Helping package to download files from different streaming platforms"
-authors = ["Dennis Fiedler <dennis.fiedler@uniprank.com>"]
-license = "MIT"
-readme = "README.md"
-package-mode = false
+[tool.poetry.scripts]
+streamseeker = "streamseeker.console.application:main"
 
 [tool.poetry.dependencies]
 python = "^3.11"
@@ -40,9 +31,14 @@ tomli = "^2.0.2"
 cleo = "^2.1.0"
 numpy = "^2.1.2"
 packaging = "^24.1"
+fastapi = "^0.115.0"
+uvicorn = { version = "^0.32.0", extras = ["standard"] }
+Pillow = "^11.0.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.3"
+httpx = "^0.27.0"
+responses = "^0.25.0"
 
 [build-system]
 requires = ["poetry-core"]

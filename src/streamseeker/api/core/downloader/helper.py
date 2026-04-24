@@ -1,6 +1,7 @@
 import os
 from datetime import datetime, timezone
 
+from streamseeker import paths
 from streamseeker.api.core.helpers import Singleton
 from streamseeker.api.core.output_handler import OutputHandler
 
@@ -15,8 +16,10 @@ class DownloadHelper(metaclass=Singleton):
     error_lines = []
 
     def __init__(self):
-        self.success_log_handler = OutputHandler(os.sep.join(["logs", "success.log"]))
-        self.error_log_handler = OutputHandler(os.sep.join(["logs", "error.log"]))
+        logs_dir = paths.logs_dir()
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        self.success_log_handler = OutputHandler(str(logs_dir / "success.log"))
+        self.error_log_handler = OutputHandler(str(logs_dir / "error.log"))
 
         self.success_lines = self.success_log_handler.read_lines()
         self.error_lines = self.error_log_handler.read_lines()
@@ -28,7 +31,8 @@ class DownloadHelper(metaclass=Singleton):
             file_size = os.path.getsize(data)
         except OSError:
             file_size = 0
-        log_message = f"[{utcTime.astimezone().isoformat()}] {data} :: size={file_size}"
+        shown = paths.display_path(data)
+        log_message = f"[{utcTime.astimezone().isoformat()}] {shown} :: size={file_size}"
 
         self.success_lines.append(log_message)
         self.success_log_handler.write_line(log_message)
@@ -36,7 +40,8 @@ class DownloadHelper(metaclass=Singleton):
 
     def download_error(self, data, url) -> None:
         utcTime = datetime.now(timezone.utc)
-        log_message = f"[{utcTime.astimezone().isoformat()}] {data} :: {url}"
+        shown = paths.display_path(data)
+        log_message = f"[{utcTime.astimezone().isoformat()}] {shown} :: {url}"
 
         self.error_lines.append(log_message)
         self.error_log_handler.write_line(log_message)
@@ -45,9 +50,11 @@ class DownloadHelper(metaclass=Singleton):
         if not os.path.isfile(file_path):
             return False
 
-        # Check success log for matching entry with size
+        # Check success log for matching entry with size. Older entries stored
+        # the absolute path, newer ones store ``~/…`` via paths.display_path().
+        needles = {str(file_path), paths.display_path(file_path)}
         for line in self.success_lines:
-            if file_path in line:
+            if any(n in line for n in needles):
                 # Extract logged size if available
                 logged_size = self._parse_size_from_log(line)
                 if logged_size is not None and logged_size > 0:
@@ -72,6 +79,10 @@ class DownloadHelper(metaclass=Singleton):
 
     def _remove_from_error_log(self, data) -> None:
         readlines = self.error_log_handler.read_lines()
-        filtered = [line for line in readlines if line.find(data) == -1]
+        needles = {str(data), paths.display_path(data)}
+        filtered = [
+            line for line in readlines
+            if not any(n and n in line for n in needles)
+        ]
         if len(filtered) != len(readlines):
             self.error_log_handler.write_lines(filtered, mode='w')

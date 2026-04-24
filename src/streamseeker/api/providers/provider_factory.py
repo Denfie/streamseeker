@@ -2,6 +2,7 @@ import json
 import os
 from datetime import datetime, timezone
 
+from streamseeker import paths
 from streamseeker.api.core.helpers import Singleton
 from streamseeker.api.core.exceptions import ProviderError
 from streamseeker.api.providers.provider_base import ProviderBase
@@ -11,7 +12,6 @@ logger = Logger().instance()
 
 class ProviderFactory(metaclass=Singleton):
     _dict = {}
-    UNSUPPORTED_FILE = os.path.join("logs", "unsupported_providers.json")
 
     def __init__(self) -> None:
         self._unsupported: dict[str, dict] = self._load_unsupported()
@@ -52,18 +52,18 @@ class ProviderFactory(metaclass=Singleton):
         self._save_unsupported()
 
     def _load_unsupported(self) -> dict:
-        if not os.path.isfile(self.UNSUPPORTED_FILE):
+        unsupported_file = paths.unsupported_providers_file()
+        if not unsupported_file.is_file():
             return {}
         try:
-            with open(self.UNSUPPORTED_FILE, "r") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, IOError):
+            return json.loads(unsupported_file.read_text())
+        except (json.JSONDecodeError, OSError):
             return {}
 
     def _save_unsupported(self) -> None:
-        os.makedirs(os.path.dirname(self.UNSUPPORTED_FILE), exist_ok=True)
-        with open(self.UNSUPPORTED_FILE, "w") as f:
-            json.dump(self._unsupported, f, indent=2, ensure_ascii=False)
+        unsupported_file = paths.unsupported_providers_file()
+        unsupported_file.parent.mkdir(parents=True, exist_ok=True)
+        unsupported_file.write_text(json.dumps(self._unsupported, indent=2, ensure_ascii=False))
         
     def get_all(self):
         return self._dict.values()

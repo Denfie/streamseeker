@@ -4,6 +4,7 @@ import threading
 
 from tqdm.auto import tqdm
 
+from streamseeker import paths
 from streamseeker.api.core.helpers import Singleton
 
 # Shared devnull stream — tqdm writes here so it never touches the terminal
@@ -11,7 +12,6 @@ _devnull = open(os.devnull, "w")
 
 
 class DownloadManager(metaclass=Singleton):
-    QUEUE_FILE = os.path.join("logs", "download_queue.json")
 
     def __init__(self):
         self._lock = threading.Lock()
@@ -43,7 +43,12 @@ class DownloadManager(metaclass=Singleton):
     def report_success(self, file_name: str) -> None:
         with self._lock:
             self._retry_contexts.pop(file_name, None)
+            item = self._find_in_queue(file_name)
             self._remove_from_queue(file_name)
+        # Library writes happen outside the queue lock to avoid nested-lock holds
+        # with LibraryStore's own lock.
+        if item is not None:
+            self._record_in_library(item)
 
     def report_failure(self, file_name: str) -> None:
         with self._lock:
@@ -130,6 +135,61 @@ class DownloadManager(metaclass=Singleton):
         queue = [item for item in queue if item.get("file_name") != file_name]
         self._save_queue(queue)
 
+    def _find_in_queue(self, file_name: str) -> dict | None:
+        for item in self._load_queue():
+            if item.get("file_name") == file_name:
+                return item
+        return None
+
+    @staticmethod
+    def _record_in_library(item: dict) -> None:
+        """Record a successful download in the Library.
+
+        Derives ``<stream>::<slug>`` from the queue item and dispatches to
+        ``LibraryStore.mark_episode_downloaded`` or ``mark_movie_downloaded``
+        based on ``type``. Library writes are best-effort — failures here must
+        never abort the caller's success path.
+        """
+        stream = item.get("stream_name")
+        slug = item.get("name")
+        if not stream or not slug:
+            return
+        key = f"{stream}::{slug}"
+
+        # Local import to avoid a circular dependency at module load time.
+        from streamseeker.api.core.library import LibraryStore
+
+        try:
+            store = LibraryStore()
+            item_type = (item.get("type") or "").lower()
+            season = int(item.get("season") or 0)
+            episode = int(item.get("episode") or 0)
+
+            if item_type == "filme":
+                store.mark_movie_downloaded(key, episode or season or 1)
+            else:
+                if season > 0 and episode > 0:
+                    store.mark_episode_downloaded(key, season, episode)
+        except Exception:
+            # Library write must not break the downloader
+            return
+
+        # Opportunistic metadata enrichment — fire-and-forget in a thread so
+        # a slow external API never blocks the download pipeline. The
+        # resolver itself swallows all errors internally.
+        try:
+            from streamseeker.api.core.metadata.resolver import MetadataResolver
+
+            def _enrich():
+                try:
+                    MetadataResolver().enrich(key)
+                except Exception:
+                    pass
+
+            threading.Thread(target=_enrich, name=f"enrich-{key}", daemon=True).start()
+        except Exception:
+            pass
+
     def _mark_failed_in_queue(self, file_name: str) -> None:
         queue = self._load_queue()
         for item in queue:
@@ -157,30 +217,31 @@ class DownloadManager(metaclass=Singleton):
             return None
 
     def _load_queue(self) -> list[dict]:
-        if not os.path.isfile(self.QUEUE_FILE):
+        queue_file = paths.queue_file()
+        if not queue_file.is_file():
             return []
         try:
-            with open(self.QUEUE_FILE, "r") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, IOError):
+            return json.loads(queue_file.read_text())
+        except (json.JSONDecodeError, OSError):
             return []
 
     def _save_queue(self, queue: list[dict]) -> None:
-        os.makedirs(os.path.dirname(self.QUEUE_FILE), exist_ok=True)
-        with open(self.QUEUE_FILE, "w") as f:
-            json.dump(queue, f, indent=2, ensure_ascii=False)
+        queue_file = paths.queue_file()
+        queue_file.parent.mkdir(parents=True, exist_ok=True)
+        queue_file.write_text(json.dumps(queue, indent=2, ensure_ascii=False))
 
     @classmethod
     def get_queue(cls) -> list[dict]:
-        if not os.path.isfile(cls.QUEUE_FILE):
+        queue_file = paths.queue_file()
+        if not queue_file.is_file():
             return []
         try:
-            with open(cls.QUEUE_FILE, "r") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, IOError):
+            return json.loads(queue_file.read_text())
+        except (json.JSONDecodeError, OSError):
             return []
 
     @classmethod
     def clear_queue(cls) -> None:
-        if os.path.isfile(cls.QUEUE_FILE):
-            os.remove(cls.QUEUE_FILE)
+        queue_file = paths.queue_file()
+        if queue_file.is_file():
+            queue_file.unlink()

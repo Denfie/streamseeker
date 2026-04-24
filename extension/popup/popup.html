@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="color-scheme" content="dark light" />
+  <link rel="stylesheet" href="popup.css" />
+  <title>StreamSeeker</title>
+</head>
+<body>
+  <header>
+    <h1>StreamSeeker</h1>
+    <div id="ss-version" class="version"></div>
+  </header>
+
+  <div id="ss-banner" class="banner" hidden></div>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab" role="tab" data-tab="updates" aria-selected="false" hidden>
+      <span class="tab__label">Neu</span>
+      <span class="tab__badge" id="ss-updates-badge"></span>
+    </button>
+    <button class="tab" role="tab" data-tab="status" aria-selected="true">Status</button>
+    <button class="tab" role="tab" data-tab="library">Sammlung</button>
+  </nav>
+
+  <section id="tab-updates" class="tab-panel" role="tabpanel" aria-labelledby="updates" hidden>
+    <div class="cards" id="ss-updates"></div>
+  </section>
+
+  <section id="tab-status" class="tab-panel" role="tabpanel" aria-labelledby="status">
+    <div class="summary" id="ss-summary"></div>
+    <div class="queue" id="ss-queue"></div>
+  </section>
+
+  <section id="tab-library" class="tab-panel" role="tabpanel" aria-labelledby="library" hidden>
+    <div class="filter-chips" id="ss-library-filter"></div>
+    <input type="search" id="ss-library-search" placeholder="Suche…" />
+    <div class="cards" id="ss-library"></div>
+  </section>
+
+  <script src="../lib/api.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
