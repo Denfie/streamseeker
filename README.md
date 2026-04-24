@@ -15,7 +15,7 @@ StreamSeeker besteht aus drei Teilen:
    stellt ein Popup mit Detail-Ansicht, Suche und Metadaten bereit.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/uniprank/streamseeker/master/assets/usage-v-0-1-5.gif" alt="Streamseeker usage" width="800"/>
+  <img src="https://raw.githubusercontent.com/denfie/streamseeker/master/assets/usage-v-0-1-5.gif" alt="Streamseeker usage" width="800"/>
 </p>
 
 ## Features
@@ -60,7 +60,7 @@ Wenn du nicht global installieren willst (oder StreamSeeker erstmal nur
 probieren):
 
 ```bash
-git clone https://github.com/uniprank/streamseeker.git
+git clone https://github.com/denfie/streamseeker.git
 cd streamseeker
 python -m pip install -r <(poetry export --without-hashes -f requirements.txt)
 python -m streamseeker run
@@ -86,7 +86,7 @@ brew install pipx           # macOS
 # oder: apt install pipx    # Ubuntu 23.04+
 
 # StreamSeeker aus dem Git-Repo installieren (ohne Checkout)
-pipx install git+https://github.com/uniprank/streamseeker.git
+pipx install git+https://github.com/denfie/streamseeker.git
 
 # Update auf die neueste Version
 pipx upgrade streamseeker
@@ -95,7 +95,7 @@ pipx upgrade streamseeker
 Alternativ aus einem lokalen Checkout:
 
 ```bash
-git clone https://github.com/uniprank/streamseeker.git
+git clone https://github.com/denfie/streamseeker.git
 pipx install ./streamseeker
 ```
 
@@ -107,7 +107,7 @@ Nach der Installation ist `streamseeker` auf dem `PATH` — **keine
 Nur relevant, wenn du am Code arbeiten oder Tests laufen lassen willst.
 
 ```bash
-git clone https://github.com/uniprank/streamseeker.git
+git clone https://github.com/denfie/streamseeker.git
 cd streamseeker
 poetry install
 poetry shell               # aktiviert das dev-venv

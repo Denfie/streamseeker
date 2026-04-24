@@ -5,8 +5,8 @@ description = "Helping package to download files from different streaming platfo
 authors = ["Dennis Fiedler <dennis.fiedler@uniprank.com>"]
 license = "MIT"
 readme = "README.md"
-homepage = "https://github.com/uniprank/streamseeker"
-repository = "https://github.com/uniprank/streamseeker"
+homepage = "https://github.com/denfie/streamseeker"
+repository = "https://github.com/denfie/streamseeker"
 packages = [{ include = "streamseeker", from = "src" }]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -15,7 +15,7 @@ classifiers = [
 ]
 
 [tool.poetry.urls]
-Issues = "https://github.com/uniprank/streamseeker/issues"
+Issues = "https://github.com/denfie/streamseeker/issues"
 
 [tool.poetry.scripts]
 streamseeker = "streamseeker.console.application:main"
