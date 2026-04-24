@@ -10,6 +10,19 @@ The browser extension is released independently; see `extension/CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Security
+- **11 Dependabot-Alerts geschlossen** — Dependency-Minima in
+  `pyproject.toml` so hochgezogen, dass alle aktuell betroffenen
+  Versionen ausgeschlossen sind:
+  - `Pillow >=12.2.0,<13` (FITS GZIP-Bomb GHSA-pp2g-v4x7-f2qw,
+    PSD OOB-Write GHSA-2j2x-2gpw-g8fm)
+  - `requests >=2.33.0,<3` (.netrc-Leak, Temp-File-Reuse)
+  - `pytest >=9.0.3,<10` (tmpdir-Race)
+  - Explizite transitive Pins: `urllib3 >=2.6.3,<3`
+    (Decompression-Bomb CVE-2025-50182) und `h11 >=0.16.0,<1`
+    (Chunked-Encoding CVE-2025-43859) — obwohl transitiv, pinnen wir
+    sie direkt, damit dependabot sie nicht immer wieder flagged.
+
 ### Changed
 - **Poetry raus, PEP 621 rein.** `pyproject.toml` nutzt jetzt den
   Standard-`[project]`-Table; Build-Backend ist `hatchling`. `poetry.lock`
