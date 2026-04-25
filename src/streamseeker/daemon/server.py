@@ -385,11 +385,11 @@ def create_app() -> FastAPI:
                 "tmdb": bool(creds.get("tmdb_api_key")),
             },
             "paths": {
-                "home": str(paths.home()),
-                "config_file": str(paths.config_file()),
-                "credentials_file": str(paths.credentials_file()),
-                "downloads": str(paths.downloads_dir()),
-                "library": str(paths.library_dir()),
+                "home": paths.display_path(paths.home()),
+                "config_file": paths.display_path(paths.config_file()),
+                "credentials_file": paths.display_path(paths.credentials_file()),
+                "downloads": paths.display_path(paths.downloads_dir()),
+                "library": paths.display_path(paths.library_dir()),
             },
             "writable_keys": sorted(_SETTINGS_WRITABLE),
         }
