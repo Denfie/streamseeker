@@ -627,6 +627,31 @@ input[type="search"]:focus {
   font-style: italic;
 }
 
+.settings__lang-group {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.settings__lang-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--bg);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text);
+  user-select: none;
+}
+
+.settings__lang-option input[type="radio"] {
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
 .card__actions {
   display: flex;
   align-items: center;

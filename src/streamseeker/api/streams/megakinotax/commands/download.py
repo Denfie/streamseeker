@@ -29,7 +29,8 @@ class MegakinotaxDownloadCommand:
             self.stream.get_name(), 'voe', movie.get('name'),
             'de', 'movie', 0, 0, url=movie.get('href')
         )
-        self.cli.line("<info>1 Eintrag zur Sammlung hinzugefügt.</info>")
+        from streamseeker.i18n import t
+        self.cli.line(f"<info>{t('queue.added.singular', count=1)}</info>")
 
         QueueProcessor().start(config=streamseek_handler.config)
 

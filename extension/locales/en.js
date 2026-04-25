@@ -1,0 +1,80 @@
+// English translation bundle.
+(function () {
+  const bundle = {
+    "header.tab.updates": "New",
+    "header.tab.status": "Status",
+    "header.tab.library": "Collection",
+    "header.tab.settings": "Settings",
+    "header.banner.daemon_unreachable": "Daemon unreachable — run 'streamseeker daemon start' first.",
+    "header.banner.cli_too_old": "CLI {cli} too old — at least {min} required.",
+
+    "search.placeholder": "Search…",
+    "filter.all": "All",
+    "filter.favorites": "⭐ Favorites",
+
+    "empty.collection": "Collection is empty.",
+    "empty.collection_load_failed": "Could not load the collection.",
+    "empty.queue": "Nothing pending.",
+    "empty.no_updates": "No updates available.",
+
+    "card.show_details": "Show details",
+    "card.fav_add": "Mark as favorite",
+    "card.fav_remove": "Remove from favorites",
+    "card.update_indicator": "New material available",
+
+    "queue.action.resume": "Resume",
+    "queue.action.requeue": "Re-queue",
+    "queue.action.pause": "Pause",
+    "queue.action.delete": "Remove",
+    "queue.status.pending": "pending",
+    "queue.status.running": "running",
+    "queue.status.paused": "paused",
+    "queue.status.failed": "failed",
+    "queue.status.skipped": "skipped",
+
+    "detail.loading": "Loading details…",
+    "detail.load_failed": "Could not load details: {message}",
+    "detail.no_overview": "No description available.",
+    "detail.stat.seasons": "Seasons",
+    "detail.stat.episodes": "Episodes",
+    "detail.pill.favorite": "⭐ Favorite",
+    "detail.action.open_site": "Open on {site}",
+    "detail.action.refresh": "Refresh metadata",
+    "detail.action.search": "Re-search with different title/year",
+    "detail.action.open_folder": "Open collection folder in Finder/Explorer",
+    "detail.action.delete": "Remove from collection",
+    "detail.action.delete_confirm": "Remove \"{title}\" from the collection?\n\nFiles on disk remain untouched — only the collection entry (incl. metadata & cover) is deleted.",
+
+    "search_override.title_placeholder": "Alternative title (e.g. Stargate SG-1)",
+    "search_override.year_placeholder": "Year",
+    "search_override.submit": "Search & Replace",
+
+    "settings.section.daemon": "Daemon",
+    "settings.section.collection": "Collection",
+    "settings.section.metadata": "Metadata",
+    "settings.section.language": "Language",
+    "settings.label.home": "Home",
+    "settings.label.downloads": "Collection",
+    "settings.label.library": "Library",
+    "settings.label.config_file": "Config file",
+    "settings.label.preferred_provider": "Preferred provider",
+    "settings.label.max_concurrent": "Max parallel activities",
+    "settings.label.max_retries": "Max retry attempts",
+    "settings.label.tmdb_key": "TMDb API key",
+    "settings.label.tmdb_key_set": "TMDb API key (set — leave empty to keep)",
+    "settings.tmdb.placeholder_set": "•••••••••• (set)",
+    "settings.tmdb.placeholder_unset": "Key from themoviedb.org",
+    "settings.tmdb.hint": "Get a TMDb key → <a href=\"https://www.themoviedb.org/settings/api\" target=\"_blank\" rel=\"noopener\">themoviedb.org/settings/api</a>. Without a key, stream chains fall back to AniList/Jikan/TVmaze (no age rating).",
+    "settings.language.de": "Deutsch",
+    "settings.language.en": "English",
+    "settings.language.hint": "Effective immediately in the browser extension. CLI/daemon switch language after `streamseeker daemon restart`.",
+    "settings.action.save": "Save",
+    "settings.action.saving": "Saving…",
+    "settings.action.saved": "Saved ✓",
+    "settings.action.error": "✕ {message}",
+    "settings.loading": "Loading settings…",
+    "settings.load_failed": "Could not load settings: {message}"
+  };
+  window.ssI18n = window.ssI18n || {};
+  window.ssI18n.en = bundle;
+})();

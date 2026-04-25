@@ -118,7 +118,8 @@ class QueueProcessor(metaclass=Singleton):
                 delay_min = self._config.get("start_delay_min", 5)
                 delay_max = self._config.get("start_delay_max", 25)
                 delay = random.uniform(delay_min, delay_max)
-                logger.debug(f"Nächste Verarbeitung in {delay:.0f}s")
+                from streamseeker.i18n import t
+                logger.debug(t("queue.next_in", seconds=delay))
                 for _ in range(int(delay)):
                     if self._stop_event.is_set():
                         return
@@ -158,7 +159,8 @@ class QueueProcessor(metaclass=Singleton):
 
         # Check if already downloaded
         if self._helper.is_downloaded(file_name):
-            logger.info(f"Bereits in Sammlung: {file_name}")
+            from streamseeker.i18n import t
+            logger.info(t("queue.already_in_collection", file_name=file_name))
             self._manager.report_success(file_name)
             return
 

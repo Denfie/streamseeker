@@ -10,6 +10,21 @@ The browser extension is released independently; see `extension/CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Added
+- **i18n: Deutsch + English umschaltbar.** Neues Modul
+  `streamseeker.i18n` mit JSON-basierten Locale-Bundles unter
+  `src/streamseeker/locales/{de,en}.json`. Aktive Sprache wird beim
+  Daemon-/CLI-Start aus `config.json` (`language`) gezogen und live
+  beim `PATCH /settings` umgeschaltet. CLI-Outputs (Sammlung-Add,
+  Skip-Hinweise, Verarbeitungs-Fehler), FFmpeg-Meldungen und
+  Daemon-Logs gehen jetzt durch `t("key", **vars)`. Unterstützte
+  Sprachen via `i18n.SUPPORTED_LANGUAGES`; weitere Locales lassen sich
+  rein additiv per zusätzlichem JSON-Bundle einhängen.
+- **Daemon-Endpoint:** `GET /settings` liefert jetzt
+  `supported_languages`; `language` ist in der Whitelist von
+  `PATCH /settings` (`config.language: "de"|"en"`). Unbekannte Codes
+  werden serverseitig verworfen.
+
 ### Security
 - **11 Dependabot-Alerts geschlossen** — Dependency-Minima in
   `pyproject.toml` so hochgezogen, dass alle aktuell betroffenen

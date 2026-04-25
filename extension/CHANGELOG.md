@@ -7,6 +7,25 @@ required CLI version via the `minCliVersion` key in `manifest.json`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.0] — 2026-04-25
+
+### Added
+- **Sprachumschaltung Deutsch ↔ English** im Settings-Tab.
+  Vierte Sektion mit Radio-Toggle. Auswahl wird als
+  `config.language` in `~/.streamseeker/config.json` persistiert. Popup
+  schaltet sofort um, CLI/Daemon übernehmen die neue Sprache nach
+  `streamseeker daemon restart` (Daemon-Endpoint `set_language` wird
+  parallel beim PATCH live aktiviert).
+- **i18n-Infrastruktur:** `extension/lib/i18n.js` als kleiner Runtime
+  (`setLanguage`/`getLanguage`/`t`), Locale-Bundles unter
+  `extension/locales/{de,en}.js`. Statisches DOM via `data-i18n`/`-title`/
+  `-placeholder`-Attribute, dynamisch erzeugte Strings via `t("key")`.
+
+### Changed
+- Tabs, Suche-Placeholder, Status-Card-Strings, Filter-Chips, Detail-
+  Modal-Loader, Card-Tooltips und alle Settings-Labels laufen jetzt
+  über die i18n-Bundles statt hartkodiertem Deutsch.
+
 ## [0.15.2] — 2026-04-25
 
 ### Changed

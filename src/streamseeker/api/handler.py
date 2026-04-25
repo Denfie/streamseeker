@@ -119,7 +119,8 @@ class StreamseekerHandler(BaseClass):
                 except LinkUrlError as e:
                     logger.error(f"{e}")
                 except DownloadExistsError as e:
-                    logger.error(f"<success>Bereits in der Sammlung vorhanden</success>")
+                    from streamseeker.i18n import t
+                    logger.error(f"<success>{t('process.already_in_collection')}</success>")
                     pass
             case _:
                 return None

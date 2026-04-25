@@ -133,19 +133,25 @@ class AniworldtoDownloadCommand:
 
         from streamseeker.api.core.downloader.processor import QueueProcessor
 
+        from streamseeker.i18n import t
+
+        def _added_msg(count: int) -> str:
+            key = "queue.added.singular" if count == 1 else "queue.added.plural"
+            return f"<info>{t(key, count=count)}</info>"
+
         if download_mode == "single":
             streamseek_handler.enqueue_single(
                 self.stream.get_name(), preferred_provider, show.get('link'),
                 language, show_type, season, episode
             )
-            self.cli.line("<info>1 Eintrag zur Sammlung hinzugefügt.</info>")
+            self.cli.line(_added_msg(1))
         elif download_mode == "season":
             count = streamseek_handler.enqueue_all(
                 self.stream.get_name(), preferred_provider, show.get('link'),
                 language, show_type, season, 0,
                 seasons_list=[season],
             )
-            self.cli.line(f"<info>{count} Einträge zur Sammlung hinzugefügt.</info>")
+            self.cli.line(_added_msg(count))
         elif download_mode == "season_from":
             count = streamseek_handler.enqueue_all(
                 self.stream.get_name(), preferred_provider, show.get('link'),
@@ -153,7 +159,7 @@ class AniworldtoDownloadCommand:
                 seasons_list=[season],
                 episodes_list=episodes,
             )
-            self.cli.line(f"<info>{count} Einträge zur Sammlung hinzugefügt.</info>")
+            self.cli.line(_added_msg(count))
         elif download_mode == "all":
             count = streamseek_handler.enqueue_all(
                 self.stream.get_name(), preferred_provider, show.get('link'),
@@ -161,7 +167,7 @@ class AniworldtoDownloadCommand:
                 seasons_list=show_info.get('series') or show_info.get('movies'),
                 episodes_list=episodes,
             )
-            self.cli.line(f"<info>{count} Einträge zur Sammlung hinzugefügt.</info>")
+            self.cli.line(_added_msg(count))
 
         # Start processor if not already running
         QueueProcessor().start(config=streamseek_handler.config)

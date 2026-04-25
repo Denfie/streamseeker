@@ -16,12 +16,12 @@
 
   <nav class="tabs" role="tablist">
     <button class="tab" role="tab" data-tab="updates" aria-selected="false" hidden>
-      <span class="tab__label">Neu</span>
+      <span class="tab__label" data-i18n="header.tab.updates">Neu</span>
       <span class="tab__badge" id="ss-updates-badge"></span>
     </button>
-    <button class="tab" role="tab" data-tab="status" aria-selected="true">Status</button>
-    <button class="tab" role="tab" data-tab="library">Sammlung</button>
-    <button class="tab" role="tab" data-tab="settings" aria-selected="false" title="Einstellungen">⚙</button>
+    <button class="tab" role="tab" data-tab="status" aria-selected="true" data-i18n="header.tab.status">Status</button>
+    <button class="tab" role="tab" data-tab="library" data-i18n="header.tab.library">Sammlung</button>
+    <button class="tab" role="tab" data-tab="settings" aria-selected="false" title="Einstellungen" data-i18n-title="header.tab.settings">⚙</button>
   </nav>
 
   <section id="tab-updates" class="tab-panel" role="tabpanel" aria-labelledby="updates" hidden>
@@ -35,7 +35,7 @@
 
   <section id="tab-library" class="tab-panel" role="tabpanel" aria-labelledby="library" hidden>
     <div class="filter-chips" id="ss-library-filter"></div>
-    <input type="search" id="ss-library-search" placeholder="Suche…" />
+    <input type="search" id="ss-library-search" placeholder="Suche…" data-i18n-placeholder="search.placeholder" />
     <div class="cards" id="ss-library"></div>
   </section>
 
@@ -61,6 +61,9 @@
     </div>
   </div>
 
+  <script src="../locales/de.js"></script>
+  <script src="../locales/en.js"></script>
+  <script src="../lib/i18n.js"></script>
   <script src="../lib/api.js"></script>
   <script src="popup.js"></script>
 </body>

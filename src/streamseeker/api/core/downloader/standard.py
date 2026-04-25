@@ -73,18 +73,20 @@ class DownloaderStandard:
                         time.sleep(20)
                         continue
 
-                logger.error(f"Server error bei {path}. Bitte sp\u00e4ter erneut versuchen.")
+                from streamseeker.i18n import t
+                logger.error(t("process.server_error", path=path))
                 helper.download_error(path, url)
                 self._manager.report_failure(path)
-                logger.error(f"\u274c {display_name} \u2014 Verarbeitung fehlgeschlagen (HTTP {code})")
+                logger.error(t("process.failed_http", name=display_name, code=code))
                 return
             except Exception:
                 pass
 
         # All retries exhausted
+        from streamseeker.i18n import t
         helper.download_error(path, url)
         self._manager.report_failure(path)
-        logger.error(f"\u274c {display_name} \u2014 Verarbeitung nach {self.retries} Versuchen fehlgeschlagen")
+        logger.error(t("process.failed_after_attempts", name=display_name, attempts=self.retries))
 
     def _download_file(self, url: str, path: str):
         file_name = os.path.basename(path)

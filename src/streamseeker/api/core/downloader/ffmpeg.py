@@ -82,7 +82,8 @@ class DownloaderFFmpeg:
         # All retries exhausted
         helper.download_error(file_name, hls_url)
         self._manager.report_failure(file_name)
-        logger.error(f"\u274c {display_name} \u2014 Verarbeitung nach {self.max_retries} Versuchen fehlgeschlagen")
+        from streamseeker.i18n import t
+        logger.error(t("process.failed_after_attempts", name=display_name, attempts=self.max_retries))
 
     def _attempt_download(self, ffmpeg_path, hls_url, file_name, display_name, pos) -> bool:
         duration = self._probe_duration(hls_url)

@@ -1,0 +1,81 @@
+// German translation bundle. Loaded via plain <script> in popup.html so
+// content scripts and the popup share the same registry on `window.ssI18n`.
+(function () {
+  const bundle = {
+    "header.tab.updates": "Neu",
+    "header.tab.status": "Status",
+    "header.tab.library": "Sammlung",
+    "header.tab.settings": "Einstellungen",
+    "header.banner.daemon_unreachable": "Daemon nicht erreichbar — bitte 'streamseeker daemon start' ausführen.",
+    "header.banner.cli_too_old": "CLI {cli} zu alt — mind. {min} benötigt.",
+
+    "search.placeholder": "Suche…",
+    "filter.all": "Alle",
+    "filter.favorites": "⭐ Favoriten",
+
+    "empty.collection": "Sammlung ist leer.",
+    "empty.collection_load_failed": "Konnte Sammlung nicht laden.",
+    "empty.queue": "Keine offenen Einträge.",
+    "empty.no_updates": "Keine Updates verfügbar.",
+
+    "card.show_details": "Details anzeigen",
+    "card.fav_add": "Als Favorit markieren",
+    "card.fav_remove": "Aus Favoriten entfernen",
+    "card.update_indicator": "Neues Material verfügbar",
+
+    "queue.action.resume": "Fortsetzen",
+    "queue.action.requeue": "Neu einreihen",
+    "queue.action.pause": "Pausieren",
+    "queue.action.delete": "Entfernen",
+    "queue.status.pending": "wartend",
+    "queue.status.running": "läuft",
+    "queue.status.paused": "pausiert",
+    "queue.status.failed": "fehlgeschlagen",
+    "queue.status.skipped": "übersprungen",
+
+    "detail.loading": "Details werden geladen…",
+    "detail.load_failed": "Konnte Details nicht laden: {message}",
+    "detail.no_overview": "Keine Beschreibung verfügbar.",
+    "detail.stat.seasons": "Staffeln",
+    "detail.stat.episodes": "Episoden",
+    "detail.pill.favorite": "⭐ Favorit",
+    "detail.action.open_site": "Auf {site} öffnen",
+    "detail.action.refresh": "Metadaten neu laden",
+    "detail.action.search": "Mit anderem Titel/Jahr neu suchen",
+    "detail.action.open_folder": "Sammlung im Finder/Explorer öffnen",
+    "detail.action.delete": "Aus Sammlung entfernen",
+    "detail.action.delete_confirm": "\"{title}\" aus der Sammlung entfernen?\n\nDie Inhalte auf der Platte bleiben erhalten — nur der Sammlungs-Eintrag (inkl. Metadaten & Cover) wird gelöscht.",
+
+    "search_override.title_placeholder": "Alternativer Titel (z.B. Stargate SG-1)",
+    "search_override.year_placeholder": "Jahr",
+    "search_override.submit": "Suchen & Ersetzen",
+
+    "settings.section.daemon": "Daemon",
+    "settings.section.collection": "Sammlung",
+    "settings.section.metadata": "Metadaten",
+    "settings.section.language": "Sprache",
+    "settings.label.home": "Home",
+    "settings.label.downloads": "Sammlung",
+    "settings.label.library": "Library",
+    "settings.label.config_file": "Config-Datei",
+    "settings.label.preferred_provider": "Bevorzugter Provider",
+    "settings.label.max_concurrent": "Max. parallele Aktivitäten",
+    "settings.label.max_retries": "Max. Retry-Versuche",
+    "settings.label.tmdb_key": "TMDb API-Key",
+    "settings.label.tmdb_key_set": "TMDb API-Key (gesetzt — leer lassen, um beizubehalten)",
+    "settings.tmdb.placeholder_set": "•••••••••• (gesetzt)",
+    "settings.tmdb.placeholder_unset": "Schlüssel aus themoviedb.org",
+    "settings.tmdb.hint": "TMDb-Key holen → <a href=\"https://www.themoviedb.org/settings/api\" target=\"_blank\" rel=\"noopener\">themoviedb.org/settings/api</a>. Ohne Key fallen Stream-Ketten auf AniList/Jikan/TVmaze zurück (kein FSK).",
+    "settings.language.de": "Deutsch",
+    "settings.language.en": "English",
+    "settings.language.hint": "Wirkt in Browser-Extension sofort. CLI/Daemon übernehmen die Sprache nach `streamseeker daemon restart`.",
+    "settings.action.save": "Speichern",
+    "settings.action.saving": "Speichere…",
+    "settings.action.saved": "Gespeichert ✓",
+    "settings.action.error": "✕ {message}",
+    "settings.loading": "Lade Einstellungen…",
+    "settings.load_failed": "Konnte Einstellungen nicht laden: {message}"
+  };
+  window.ssI18n = window.ssI18n || {};
+  window.ssI18n.de = bundle;
+})();

@@ -9,7 +9,7 @@ import time
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from pydantic import BaseModel, Field
@@ -63,6 +63,11 @@ class QueueItemRequest(BaseModel):
     language: str = "german"
     preferred_provider: Optional[str] = None
     file_name: Optional[str] = None
+
+
+class SettingsPatch(BaseModel):
+    config: Optional[dict] = None
+    tmdb_api_key: Optional[str] = None
 
 
 class MarkRequest(BaseModel):
@@ -258,6 +263,12 @@ def create_app() -> FastAPI:
     )
 
     @app.on_event("startup")
+    def _activate_language_on_startup() -> None:
+        from streamseeker.i18n import init_from_config
+        active = init_from_config()
+        logger.info(f"language activated: {active}")
+
+    @app.on_event("startup")
     def _verify_library_index_on_startup() -> None:
         """Runs before anything else touches the library.
 
@@ -359,6 +370,7 @@ def create_app() -> FastAPI:
         "max_retries",
         "ddos_limit",
         "ddos_timer",
+        "language",
     }
 
     def _read_config_safely() -> dict:
@@ -376,10 +388,12 @@ def create_app() -> FastAPI:
 
     @app.get("/settings")
     def settings_get() -> dict:
+        from streamseeker.i18n import SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE
         cfg = _read_config_safely()
         creds = paths.load_credentials()
         return {
-            "config": cfg,
+            "config": {**cfg, "language": cfg.get("language") or DEFAULT_LANGUAGE},
+            "supported_languages": list(SUPPORTED_LANGUAGES),
             "credentials": {
                 # Boolean flags only — never echo the actual key.
                 "tmdb": bool(creds.get("tmdb_api_key")),
@@ -394,29 +408,33 @@ def create_app() -> FastAPI:
             "writable_keys": sorted(_SETTINGS_WRITABLE),
         }
 
-    class SettingsPatch(BaseModel):
-        config: Optional[dict] = None
-        tmdb_api_key: Optional[str] = None
-
     @app.patch("/settings")
-    def settings_patch(body: SettingsPatch) -> dict:
+    def settings_patch(payload: SettingsPatch) -> dict:
+        from streamseeker.i18n import SUPPORTED_LANGUAGES, set_language
         applied: dict = {}
-        if body.config:
+        if payload.config:
             cfg = _read_config_safely()
-            for k, v in body.config.items():
+            for k, v in payload.config.items():
                 if k not in _SETTINGS_WRITABLE:
+                    continue
+                # Reject unknown language codes — saving "fr" without a
+                # locale bundle would just silently fall back to English.
+                if k == "language" and v not in SUPPORTED_LANGUAGES:
                     continue
                 cfg[k] = v
                 applied[k] = v
             _write_config(cfg)
+            # Live-apply language so subsequent log lines speak it.
+            if "language" in applied:
+                set_language(applied["language"])
 
-        if body.tmdb_api_key is not None:
+        if payload.tmdb_api_key is not None:
             creds_file = paths.credentials_file()
             current = paths.load_credentials() if creds_file.is_file() else {}
-            if body.tmdb_api_key.strip() == "":
+            if payload.tmdb_api_key.strip() == "":
                 current.pop("tmdb_api_key", None)
             else:
-                current["tmdb_api_key"] = body.tmdb_api_key.strip()
+                current["tmdb_api_key"] = payload.tmdb_api_key.strip()
             creds_file.parent.mkdir(parents=True, exist_ok=True)
             creds_file.write_text(json.dumps(current, indent=2))
             try:

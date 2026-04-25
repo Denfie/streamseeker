@@ -28,13 +28,14 @@
 
   async function init() {
     await loadManifestMeta();
+    await loadActiveLanguage();
     wireTabs();
     wireSearch();
 
     try {
       const daemonAlive = await api.isDaemonAlive();
       if (!daemonAlive) {
-        showBanner("Daemon nicht erreichbar — bitte 'streamseeker daemon start' ausführen.");
+        showBanner(window.ssI18n.t("header.banner.daemon_unreachable"));
         return;
       }
 
@@ -45,7 +46,7 @@
       document.querySelector("#ss-version").textContent =
         `ext ${manifest.version} · CLI ${version.cli}`;
       if (!api.versionGte(version.cli, minCliVersion)) {
-        showBanner(`CLI ${version.cli} zu alt — mind. ${minCliVersion} benötigt.`);
+        showBanner(window.ssI18n.t("header.banner.cli_too_old", { cli: version.cli, min: minCliVersion }));
       }
     } catch (err) {
       console.warn("[streamseeker] init failed", err);
@@ -79,6 +80,33 @@
     const panels = document.querySelectorAll(".tab-panel");
     tabs.forEach((t) => t.setAttribute("aria-selected", t.dataset.tab === name ? "true" : "false"));
     panels.forEach((p) => (p.hidden = `tab-${name}` !== p.id));
+  }
+
+  async function loadActiveLanguage() {
+    // Pull the language the daemon thinks is active so the popup uses
+    // the same locale as the CLI/daemon. Fail open: stay on English.
+    try {
+      const settings = await api.settingsGet();
+      const code = settings && settings.config && settings.config.language;
+      if (code && window.ssI18n) window.ssI18n.setLanguage(code);
+    } catch (_) { /* ignore — daemon might be down */ }
+    applyStaticI18n();
+  }
+
+  // Apply translations to all data-i18n* attributes in the static DOM.
+  // Called on init() and again after the language toggle saves.
+  function applyStaticI18n() {
+    if (!window.ssI18n) return;
+    const t = window.ssI18n.t;
+    document.querySelectorAll("[data-i18n]").forEach((el) => {
+      el.textContent = t(el.getAttribute("data-i18n"));
+    });
+    document.querySelectorAll("[data-i18n-title]").forEach((el) => {
+      el.title = t(el.getAttribute("data-i18n-title"));
+    });
+    document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
+      el.placeholder = t(el.getAttribute("data-i18n-placeholder"));
+    });
   }
 
   async function loadManifestMeta() {
@@ -152,7 +180,7 @@
       const queueEl = document.querySelector("#ss-queue");
       queueEl.innerHTML = "";
       if (!items.length) {
-        queueEl.innerHTML = '<div class="empty">Keine offenen Einträge.</div>';
+        queueEl.innerHTML = `<div class="empty">${window.ssI18n.t("empty.queue")}</div>`;
       } else {
         const progressByName = new Map(progress.map((p) => [p.name, p]));
         for (const item of items) {
@@ -279,7 +307,7 @@
       renderFilterChips("#ss-library-filter", rows, libraryFilter, repaint);
       repaint();
     } catch (err) {
-      container.innerHTML = '<div class="empty">Konnte Sammlung nicht laden.</div>';
+      container.innerHTML = `<div class="empty">${window.ssI18n.t("empty.collection_load_failed")}</div>`;
     }
   }
 
@@ -291,7 +319,7 @@
     if (filterState.stream) rows = rows.filter((r) => r.stream === filterState.stream);
     if (filterState.favoritesOnly) rows = rows.filter((r) => r.favorite);
     if (!rows.length) {
-      container.innerHTML = '<div class="empty">Sammlung ist leer.</div>';
+      container.innerHTML = `<div class="empty">${window.ssI18n.t("empty.collection")}</div>`;
       return;
     }
     for (const row of rows) {
@@ -311,7 +339,7 @@
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "chip chip--fav";
-      btn.textContent = "⭐ Favoriten";
+      btn.textContent = window.ssI18n.t("filter.favorites");
       if (filterState.favoritesOnly) btn.classList.add("chip--active");
       btn.addEventListener("click", () => {
         filterState.favoritesOnly = !filterState.favoritesOnly;
@@ -338,7 +366,7 @@
       host.appendChild(btn);
     };
 
-    addChip(null, "Alle");
+    addChip(null, window.ssI18n.t("filter.all"));
     for (const s of streams) addChip(s, STREAM_LABELS[s] || s);
   }
 
@@ -356,13 +384,18 @@
     return base;
   }
 
-  const STATUS_LABELS = {
-    pending: "wartend",
-    downloading: "läuft",
-    paused: "pausiert",
-    failed: "fehlgeschlagen",
-    skipped: "übersprungen",
-  };
+  function statusLabel(status) {
+    const t = window.ssI18n && window.ssI18n.t;
+    if (!t) return status;
+    const map = {
+      pending: "queue.status.pending",
+      downloading: "queue.status.running",
+      paused: "queue.status.paused",
+      failed: "queue.status.failed",
+      skipped: "queue.status.skipped",
+    };
+    return t(map[status] || `queue.status.${status}`);
+  }
 
   function renderQueueCard(item, progressByName) {
     const stream = item.stream_name;
@@ -413,7 +446,7 @@
     );
     const pctText = progressMatch && progressMatch.pct
       ? ` · ${progressMatch.pct.toFixed(1)}%` : "";
-    meta.textContent = `${STATUS_LABELS[status] || status}${epLabel ? " · " + epLabel : ""}${pctText}`;
+    meta.textContent = `${statusLabel(status)}${epLabel ? " · " + epLabel : ""}${pctText}`;
     body.appendChild(meta);
 
     if (progressMatch) {
@@ -494,7 +527,7 @@
     card.className = "card";
     card.dataset.title = row.title || row.slug || "";
 
-    card.title = "Details anzeigen";
+    card.title = window.ssI18n.t("card.show_details");
     card.addEventListener("click", (ev) => {
       if (ev.target.closest("button")) return;  // let action buttons handle themselves
       showDetailModal(row);
@@ -514,7 +547,7 @@
       const star = document.createElement("span");
       star.className = "card__star";
       star.textContent = "★";
-      star.title = "Neues Material verfügbar";
+      star.title = window.ssI18n.t("card.update_indicator");
       title.appendChild(star);
     }
     body.appendChild(title);
@@ -541,7 +574,7 @@
     favBtn.type = "button";
     favBtn.className = `card__fav-btn ${row.favorite ? "is-on" : ""}`;
     favBtn.textContent = row.favorite ? "★" : "☆";
-    favBtn.title = row.favorite ? "Aus Favoriten entfernen" : "Als Favorit markieren";
+    favBtn.title = window.ssI18n.t(row.favorite ? "card.fav_remove" : "card.fav_add");
     favBtn.addEventListener("click", async (ev) => {
       ev.stopPropagation();
       try {
@@ -554,7 +587,7 @@
         }
         favBtn.textContent = row.favorite ? "★" : "☆";
         favBtn.classList.toggle("is-on", row.favorite);
-        favBtn.title = row.favorite ? "Aus Favoriten entfernen" : "Als Favorit markieren";
+        favBtn.title = window.ssI18n.t(row.favorite ? "card.fav_remove" : "card.fav_add");
       } catch (err) {
         console.warn("[streamseeker] favorite toggle failed", err);
       }
@@ -594,7 +627,7 @@
     titleEl.textContent = row.title || row.slug || row.key;
     metaEl.innerHTML = "";
     genresEl.innerHTML = "";
-    overviewEl.textContent = "Details werden geladen…";
+    overviewEl.textContent = window.ssI18n.t("detail.loading");
     statsEl.innerHTML = "";
     actionsEl.innerHTML = "";
 
@@ -842,12 +875,12 @@
 
   async function renderSettings() {
     const host = document.querySelector("#ss-settings");
-    host.innerHTML = '<div class="settings__loading">Lade Einstellungen…</div>';
+    host.innerHTML = `<div class="settings__loading">${window.ssI18n.t("settings.loading")}</div>`;
     let data;
     try {
       data = await api.settingsGet();
     } catch (err) {
-      host.innerHTML = `<div class="empty">Konnte Einstellungen nicht laden: ${err.message}</div>`;
+      host.innerHTML = `<div class="empty">${window.ssI18n.t("settings.load_failed", { message: err.message })}</div>`;
       return;
     }
     host.innerHTML = "";
@@ -858,17 +891,19 @@
     const wrap = document.createElement("div");
     wrap.className = "settings";
 
+    const t = window.ssI18n.t;
+
     // --- Section: Daemon-Info (read-only) ---
     const info = document.createElement("section");
     info.className = "settings__section";
-    info.innerHTML = `<h3>Daemon</h3>`;
+    info.innerHTML = `<h3>${t("settings.section.daemon")}</h3>`;
     const dl = document.createElement("dl");
     dl.className = "settings__info";
     [
-      ["Home", data.paths.home],
-      ["Sammlung", data.paths.downloads],
-      ["Library", data.paths.library],
-      ["Config-Datei", data.paths.config_file],
+      [t("settings.label.home"), data.paths.home],
+      [t("settings.label.downloads"), data.paths.downloads],
+      [t("settings.label.library"), data.paths.library],
+      [t("settings.label.config_file"), data.paths.config_file],
     ].forEach(([k, v]) => {
       const dt = document.createElement("dt"); dt.textContent = k;
       const dd = document.createElement("dd"); dd.textContent = v;
@@ -880,9 +915,9 @@
     // --- Section: Sammlung (queue + pipeline tuning) ---
     const dlSection = document.createElement("section");
     dlSection.className = "settings__section";
-    dlSection.innerHTML = `<h3>Sammlung</h3>`;
+    dlSection.innerHTML = `<h3>${t("settings.section.collection")}</h3>`;
 
-    const providerLabel = labeledField("Bevorzugter Provider", "preferred_provider");
+    const providerLabel = labeledField(t("settings.label.preferred_provider"), "preferred_provider");
     const providerSelect = document.createElement("select");
     providerSelect.id = "settings-preferred-provider";
     PROVIDER_CHOICES.forEach((p) => {
@@ -894,7 +929,7 @@
     providerLabel.appendChild(providerSelect);
     dlSection.appendChild(providerLabel);
 
-    const concLabel = labeledField("Max. parallele Aktivitäten", "max_concurrent");
+    const concLabel = labeledField(t("settings.label.max_concurrent"), "max_concurrent");
     const concInput = document.createElement("input");
     concInput.type = "number"; concInput.id = "settings-max-concurrent";
     concInput.min = "1"; concInput.max = "10";
@@ -902,7 +937,7 @@
     concLabel.appendChild(concInput);
     dlSection.appendChild(concLabel);
 
-    const retryLabel = labeledField("Max. Retry-Versuche", "max_retries");
+    const retryLabel = labeledField(t("settings.label.max_retries"), "max_retries");
     const retryInput = document.createElement("input");
     retryInput.type = "number"; retryInput.id = "settings-max-retries";
     retryInput.min = "0"; retryInput.max = "10";
@@ -915,27 +950,62 @@
     // --- Section: Metadata ---
     const meta = document.createElement("section");
     meta.className = "settings__section";
-    meta.innerHTML = `<h3>Metadaten</h3>`;
+    meta.innerHTML = `<h3>${t("settings.section.metadata")}</h3>`;
 
     const tmdbLabel = labeledField(
-      `TMDb API-Key${data.credentials.tmdb ? " (gesetzt — leer lassen, um beizubehalten)" : ""}`,
+      t(data.credentials.tmdb ? "settings.label.tmdb_key_set" : "settings.label.tmdb_key"),
       "tmdb_api_key"
     );
     const tmdbInput = document.createElement("input");
     tmdbInput.type = "password";
     tmdbInput.id = "settings-tmdb-key";
-    tmdbInput.placeholder = data.credentials.tmdb
-      ? "•••••••••• (gesetzt)"
-      : "Schlüssel aus themoviedb.org";
+    tmdbInput.placeholder = t(data.credentials.tmdb
+      ? "settings.tmdb.placeholder_set"
+      : "settings.tmdb.placeholder_unset");
     tmdbLabel.appendChild(tmdbInput);
     meta.appendChild(tmdbLabel);
 
     const hint = document.createElement("p");
     hint.className = "settings__hint";
-    hint.innerHTML = `TMDb-Key holen → <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener">themoviedb.org/settings/api</a>. Ohne Key fallen Stream-Ketten auf AniList/Jikan/TVmaze zurück (kein FSK).`;
+    hint.innerHTML = t("settings.tmdb.hint");
     meta.appendChild(hint);
 
     wrap.appendChild(meta);
+
+    // --- Section: Sprache ---
+    const lang = document.createElement("section");
+    lang.className = "settings__section";
+    lang.innerHTML = `<h3>${t("settings.section.language")}</h3>`;
+
+    const langGroup = document.createElement("div");
+    langGroup.className = "settings__lang-group";
+    const currentLang = (data.config && data.config.language) || "en";
+    const supported = data.supported_languages || ["de", "en"];
+
+    supported.forEach((code) => {
+      const id = `settings-lang-${code}`;
+      const wrapper = document.createElement("label");
+      wrapper.className = "settings__lang-option";
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.name = "settings-language";
+      radio.value = code;
+      radio.id = id;
+      if (code === currentLang) radio.checked = true;
+      const text = document.createElement("span");
+      text.textContent = t(`settings.language.${code}`);
+      wrapper.appendChild(radio);
+      wrapper.appendChild(text);
+      langGroup.appendChild(wrapper);
+    });
+    lang.appendChild(langGroup);
+
+    const langHint = document.createElement("p");
+    langHint.className = "settings__hint";
+    langHint.textContent = t("settings.language.hint");
+    lang.appendChild(langHint);
+
+    wrap.appendChild(lang);
 
     // --- Save row ---
     const actions = document.createElement("div");
@@ -943,14 +1013,15 @@
     const saveBtn = document.createElement("button");
     saveBtn.type = "button";
     saveBtn.className = "detail__primary";
-    saveBtn.textContent = "Speichern";
+    saveBtn.textContent = window.ssI18n.t("settings.action.save");
     const status = document.createElement("span");
     status.className = "settings__status";
 
     saveBtn.addEventListener("click", async () => {
       saveBtn.disabled = true;
-      saveBtn.textContent = "Speichere…";
+      saveBtn.textContent = window.ssI18n.t("settings.action.saving");
       status.textContent = "";
+      const langChoice = (langGroup.querySelector('input[name="settings-language"]:checked') || {}).value;
       const payload = {
         config: {
           preferred_provider: providerSelect.value,
@@ -958,21 +1029,26 @@
           max_retries: parseInt(retryInput.value, 10) || 3,
         },
       };
+      if (langChoice) payload.config.language = langChoice;
       const tmdb = tmdbInput.value.trim();
       if (tmdb) payload.tmdb_api_key = tmdb;
       try {
         await api.settingsPatch(payload);
-        status.textContent = "Gespeichert ✓";
+        // Apply language change immediately to the popup; full re-render
+        // happens on the timer below.
+        if (langChoice) window.ssI18n.setLanguage(langChoice);
+        status.textContent = window.ssI18n.t("settings.action.saved");
         status.style.color = "var(--success)";
         tmdbInput.value = "";
-        // Re-render so the "(gesetzt)" hint reflects reality
+        // Re-render so the "(gesetzt)" hint reflects reality and any
+        // localized labels switch.
         setTimeout(renderSettings, 800);
       } catch (err) {
-        status.textContent = `✕ ${err.message || "Fehler"}`;
+        status.textContent = window.ssI18n.t("settings.action.error", { message: err.message || "Error" });
         status.style.color = "var(--danger)";
       } finally {
         saveBtn.disabled = false;
-        saveBtn.textContent = "Speichern";
+        saveBtn.textContent = window.ssI18n.t("settings.action.save");
       }
     });
 

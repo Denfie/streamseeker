@@ -1,0 +1,11 @@
+{
+  "queue.added.singular": "1 Eintrag zur Sammlung hinzugefügt.",
+  "queue.added.plural": "{count} Einträge zur Sammlung hinzugefügt.",
+  "queue.already_in_collection": "Bereits in Sammlung: {file_name}",
+  "queue.next_in": "Nächste Verarbeitung in {seconds:.0f}s",
+  "process.failed_after_attempts": "❌ {name} — Verarbeitung nach {attempts} Versuchen fehlgeschlagen",
+  "process.failed_http": "❌ {name} — Verarbeitung fehlgeschlagen (HTTP {code})",
+  "process.server_error": "Server error bei {path}. Bitte später erneut versuchen.",
+  "process.already_in_collection": "Bereits in der Sammlung vorhanden",
+  "ffmpeg.not_installed": "<fg=red>FFmpeg ist nicht installiert.</> Bitte installiere FFmpeg und versuche es erneut. Download unter <fg=cyan>https://ffmpeg.org/</>"
+}

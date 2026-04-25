@@ -101,6 +101,8 @@ class Application(BaseApplication):
         self.set_command_loader(command_loader)
 
 def main() -> int:
+    from streamseeker.i18n import init_from_config
+    init_from_config()
     exit_code: int = Application().run()
     return exit_code
 
