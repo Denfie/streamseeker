@@ -7,6 +7,14 @@ required CLI version via the `minCliVersion` key in `manifest.json`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.1] — 2026-04-25
+
+### Fixed
+- **Speichern-Button im Settings-Tab geht jetzt über die volle
+  Containerbreite** — vorher schmiegte er sich nur an seine eigene
+  Textbreite, die Sektionen oben drüber waren full-width. Status-Text
+  rutscht eine Zeile unter den Button.
+
 ## [0.15.0] — 2026-04-25
 
 ### Added
