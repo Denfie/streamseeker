@@ -7,6 +7,16 @@ required CLI version via the `minCliVersion` key in `manifest.json`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.2] — 2026-04-25
+
+### Changed
+- **Settings-Tab: "Downloads" → "Sammlung".** Pfad-Label ("Sammlung"
+  statt "Downloads"), Sektionstitel ("Sammlung" statt "Downloads") und
+  Feldlabel ("Max. parallele Aktivitäten" statt "Max. parallele
+  Downloads"). Disk-Pfad bleibt `~/.streamseeker/downloads/` — nur die
+  UI-Beschriftung ändert sich, damit nichts an existierenden Daten
+  bricht.
+
 ## [0.15.1] — 2026-04-25
 
 ### Fixed

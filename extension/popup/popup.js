@@ -866,7 +866,7 @@
     dl.className = "settings__info";
     [
       ["Home", data.paths.home],
-      ["Downloads", data.paths.downloads],
+      ["Sammlung", data.paths.downloads],
       ["Library", data.paths.library],
       ["Config-Datei", data.paths.config_file],
     ].forEach(([k, v]) => {
@@ -877,10 +877,10 @@
     info.appendChild(dl);
     wrap.appendChild(info);
 
-    // --- Section: Downloads ---
+    // --- Section: Sammlung (queue + pipeline tuning) ---
     const dlSection = document.createElement("section");
     dlSection.className = "settings__section";
-    dlSection.innerHTML = `<h3>Downloads</h3>`;
+    dlSection.innerHTML = `<h3>Sammlung</h3>`;
 
     const providerLabel = labeledField("Bevorzugter Provider", "preferred_provider");
     const providerSelect = document.createElement("select");
@@ -894,7 +894,7 @@
     providerLabel.appendChild(providerSelect);
     dlSection.appendChild(providerLabel);
 
-    const concLabel = labeledField("Max. parallele Downloads", "max_concurrent");
+    const concLabel = labeledField("Max. parallele Aktivitäten", "max_concurrent");
     const concInput = document.createElement("input");
     concInput.type = "number"; concInput.id = "settings-max-concurrent";
     concInput.min = "1"; concInput.max = "10";
