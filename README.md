@@ -188,6 +188,12 @@ Icon öffnet das Popup mit Sammlung, Status und Updates.
       <sub>Detail-Modal mit Cover, Metadaten und Aktionen</sub>
     </td>
   </tr>
+  <tr>
+    <td align="center" colspan="2">
+      <img src="assets/chrome-extension-5.png" alt="Settings-Tab" width="380" /><br>
+      <sub>Settings-Tab — Daemon-Pfade, Provider, max. parallele Downloads, TMDb-Key</sub>
+    </td>
+  </tr>
 </table>
 
 ### Optional: TMDb-API-Key für Metadaten
