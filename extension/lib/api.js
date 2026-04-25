@@ -60,6 +60,7 @@
     libraryList: () => request("GET", "/library"),
     libraryGet: (key) => request("GET", `/library/${encodeURIComponent(key)}`),
     libraryDelete: (key) => request("DELETE", `/library/${encodeURIComponent(key)}`),
+    libraryOpenFolder: (key) => request("POST", `/library/${encodeURIComponent(key)}/open-folder`),
     libraryRefresh: (key, opts = {}) => {
       const qs = new URLSearchParams();
       if (opts.title) qs.set("title", opts.title);

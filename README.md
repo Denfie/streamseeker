@@ -158,6 +158,31 @@ die Content-Scripts greifen. Danach: Favoriten-Stern neben dem Serien-
 Titel, Staffel-/Episoden-Badges in der Übersicht, Klick aufs Extension-
 Icon öffnet das Popup mit Sammlung, Status und Updates.
 
+#### So sieht das in der Praxis aus
+
+<table>
+  <tr>
+    <td align="center">
+      <img src="assets/chrome-extension-1.png" alt="Status-Indikatoren auf der Serien-Seite" width="380" /><br>
+      <sub>Status-Indikatoren direkt auf der Serien-Seite</sub>
+    </td>
+    <td align="center">
+      <img src="assets/chrome-extension-2.png" alt="Episoden-Badges in der Tabelle" width="380" /><br>
+      <sub>Farbige Episoden-Badges in der Folgen-Tabelle</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="assets/chrome-extension-3.png" alt="Popup mit Sammlung" width="380" /><br>
+      <sub>Popup-Übersicht — Sammlung, Filter, FSK-Badges</sub>
+    </td>
+    <td align="center">
+      <img src="assets/chrome-extension-4.png" alt="Detail-Modal" width="380" /><br>
+      <sub>Detail-Modal mit Cover, Metadaten und Aktionen</sub>
+    </td>
+  </tr>
+</table>
+
 ### Optional: TMDb-API-Key für Metadaten
 
 Damit Cover, deutsche Overviews und FSK-Badges befüllt werden, trage

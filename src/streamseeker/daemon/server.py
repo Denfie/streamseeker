@@ -666,6 +666,63 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=404, detail=f"not in library: {key}")
         return entry
 
+    # Maps a stream-slug to the on-disk subfolder used by ``build_file_path``.
+    # Centralised here so the open-folder endpoint can derive the right
+    # path without round-tripping through the stream classes (which need
+    # network access to instantiate).
+    _STREAM_TYPE_DIR = {
+        "aniworldto": "anime",
+        "sto": "serie",
+        "megakinotax": "movies/megakinotax",
+    }
+
+    def _downloads_folder_for(entry: dict) -> "Path":
+        from pathlib import Path
+        slug = entry.get("slug") or ""
+        stream = entry.get("stream") or ""
+        sub = _STREAM_TYPE_DIR.get(stream)
+        if sub is None:
+            return paths.downloads_dir()
+        # megakinotax dumps everything into /movies/megakinotax/ without
+        # a per-slug folder, so for that stream the show "folder" is the
+        # megakinotax dir itself.
+        if stream == "megakinotax":
+            return paths.downloads_dir() / sub
+        return paths.downloads_dir() / sub / slug
+
+    def _open_in_file_manager(path: "Path") -> str:
+        """Spawn the platform's file manager pointed at ``path``.
+
+        Falls back to ``path.parent`` if the requested folder doesn't exist
+        — better to land in the parent than throw 500.
+        """
+        import subprocess
+        import sys
+        if not path.exists():
+            path = path.parent if path.parent.exists() else paths.downloads_dir()
+        target = str(path)
+        if sys.platform == "darwin":
+            subprocess.Popen(["open", target])
+        elif sys.platform.startswith("linux"):
+            subprocess.Popen(["xdg-open", target])
+        elif sys.platform == "win32":
+            subprocess.Popen(["explorer", target])
+        else:
+            raise HTTPException(status_code=501, detail=f"unsupported platform: {sys.platform}")
+        return target
+
+    @app.post("/library/{key:path}/open-folder")
+    def library_open_folder(key: str) -> dict:
+        """Open the user's local download folder for ``key`` in Finder /
+        Explorer / xdg. Daemon must be running on the user's host (it is —
+        bound to 127.0.0.1 only) for this to make sense.
+        """
+        entry = LibraryStore().get(KIND_LIBRARY, key)
+        if entry is None:
+            raise HTTPException(status_code=404, detail=f"not in library: {key}")
+        target = _open_in_file_manager(_downloads_folder_for(entry))
+        return {"opened": target, "key": key}
+
     @app.delete("/library/{key:path}")
     def library_delete(key: str) -> dict:
         """Remove a library entry + its asset folder (poster, backdrop).

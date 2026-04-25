@@ -708,6 +708,22 @@
     });
     iconRow.appendChild(tuneBtn);
 
+    const folderBtn = iconButton("📁", "Sammlung im Finder/Explorer öffnen", async (btn) => {
+      btn.disabled = true;
+      const prev = btn.textContent;
+      btn.textContent = "…";
+      try {
+        await api.libraryOpenFolder(row.key);
+        btn.textContent = prev;
+        btn.disabled = false;
+      } catch (err) {
+        btn.textContent = "✕";
+        btn.title = err.message || "Fehler";
+        setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 2000);
+      }
+    });
+    iconRow.appendChild(folderBtn);
+
     const deleteBtn = iconButton("🗑", "Aus Sammlung entfernen", async (btn) => {
       const label = entry.title || entry.slug || entry.key;
       if (!confirm(`"${label}" aus der Sammlung entfernen?\n\nDie heruntergeladenen Videos bleiben erhalten — nur der Sammlungs-Eintrag (inkl. Metadaten & Cover) wird gelöscht.`)) return;

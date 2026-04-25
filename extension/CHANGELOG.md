@@ -7,6 +7,17 @@ required CLI version via the `minCliVersion` key in `manifest.json`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] — 2026-04-25
+
+### Added
+- **📁 Sammlung öffnen-Button im Detail-Modal.** Vierter Icon-Button in
+  der Tool-Reihe (`↻ 🔎 📁 🗑`). Triggert
+  `POST /library/{key}/open-folder`; der Daemon resolvt den Pfad in
+  `~/.streamseeker/downloads/<type>/<slug>/` und öffnet ihn
+  plattformspezifisch (`open` auf macOS, `xdg-open` auf Linux,
+  `explorer` auf Windows). Fällt bei nicht existentem Ordner auf den
+  Parent zurück, statt 500 zu werfen.
+
 ## [0.13.4] — 2026-04-24
 
 ### Fixed
