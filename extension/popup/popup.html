@@ -21,6 +21,7 @@
     </button>
     <button class="tab" role="tab" data-tab="status" aria-selected="true">Status</button>
     <button class="tab" role="tab" data-tab="library">Sammlung</button>
+    <button class="tab" role="tab" data-tab="settings" aria-selected="false" title="Einstellungen">⚙</button>
   </nav>
 
   <section id="tab-updates" class="tab-panel" role="tabpanel" aria-labelledby="updates" hidden>
@@ -36,6 +37,10 @@
     <div class="filter-chips" id="ss-library-filter"></div>
     <input type="search" id="ss-library-search" placeholder="Suche…" />
     <div class="cards" id="ss-library"></div>
+  </section>
+
+  <section id="tab-settings" class="tab-panel" role="tabpanel" aria-labelledby="settings" hidden>
+    <div id="ss-settings"></div>
   </section>
 
   <div id="ss-detail" class="detail" hidden aria-hidden="true" role="dialog">

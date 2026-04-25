@@ -536,6 +536,89 @@ input[type="search"]:focus {
   text-align: center;
 }
 
+/* Settings tab */
+
+.settings__section {
+  background: var(--bg-alt);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+
+.settings__section h3 {
+  margin: 0 0 8px 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.settings__info {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  row-gap: 4px;
+  column-gap: 8px;
+  font-size: 11px;
+  margin: 0;
+}
+.settings__info dt { color: var(--muted); }
+.settings__info dd {
+  margin: 0;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  word-break: break-all;
+}
+
+.settings__field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.settings__field > span { font-weight: 600; }
+
+.settings__field input,
+.settings__field select {
+  padding: 6px 8px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 12px;
+}
+.settings__field input:focus,
+.settings__field select:focus {
+  outline: 0;
+  border-color: var(--accent);
+}
+
+.settings__hint {
+  font-size: 10px;
+  color: var(--muted);
+  margin: 6px 0 0;
+  line-height: 1.4;
+}
+.settings__hint a { color: var(--accent); }
+
+.settings__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.settings__status { font-size: 11px; font-weight: 600; }
+
+.settings__loading {
+  padding: 20px 0;
+  text-align: center;
+  color: var(--muted);
+  font-style: italic;
+}
+
 .card__actions {
   display: flex;
   align-items: center;

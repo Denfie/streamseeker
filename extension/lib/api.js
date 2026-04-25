@@ -61,6 +61,9 @@
     libraryGet: (key) => request("GET", `/library/${encodeURIComponent(key)}`),
     libraryDelete: (key) => request("DELETE", `/library/${encodeURIComponent(key)}`),
     libraryOpenFolder: (key) => request("POST", `/library/${encodeURIComponent(key)}/open-folder`),
+
+    settingsGet: () => request("GET", "/settings"),
+    settingsPatch: (payload) => request("PATCH", "/settings", payload),
     libraryRefresh: (key, opts = {}) => {
       const qs = new URLSearchParams();
       if (opts.title) qs.set("title", opts.title);

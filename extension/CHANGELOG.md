@@ -7,6 +7,22 @@ required CLI version via the `minCliVersion` key in `manifest.json`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0] — 2026-04-25
+
+### Added
+- **Settings-Tab** (⚙) im Popup. Zeigt Daemon-Pfade (Home, Downloads,
+  Library, Config) und erlaubt das Editieren der wichtigsten Werte:
+  Bevorzugter Provider, max. parallele Downloads, max. Retries und
+  TMDb-API-Key. Backend-Endpoints `GET /settings` (gibt **keinen**
+  Klartext-Key zurück, nur Boolean-Flag) und `PATCH /settings` mit
+  Whitelist-validierten Schreibfeldern. TMDb-Key landet weiterhin in
+  `~/.streamseeker/config.credentials.json` mit `chmod 600`.
+
+### Fixed
+- **Header zeigt jetzt sowohl Extension- als auch CLI-Version**
+  (`ext 0.15.0 · CLI 0.2.0`). Vorher überschrieb der Daemon-Version-Fetch
+  die zuvor gesetzte Extension-Version.
+
 ## [0.14.0] — 2026-04-25
 
 ### Added

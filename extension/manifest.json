@@ -3,7 +3,7 @@
   "name": "StreamSeeker",
   "short_name": "StreamSeeker",
   "description": "Track your favourite series and movies on aniworld.to, s.to and megakino.tax.",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "minimum_chrome_version": "116",
 
   "minCliVersion": "0.2.0",

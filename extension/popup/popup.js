@@ -39,7 +39,11 @@
       }
 
       const version = await api.version();
-      document.querySelector("#ss-version").textContent = `CLI ${version.cli}`;
+      // Show both ext + CLI in the header so it's obvious whether the
+      // browser-side or daemon-side build is what the user expects.
+      const manifest = chrome.runtime.getManifest();
+      document.querySelector("#ss-version").textContent =
+        `ext ${manifest.version} · CLI ${version.cli}`;
       if (!api.versionGte(version.cli, minCliVersion)) {
         showBanner(`CLI ${version.cli} zu alt — mind. ${minCliVersion} benötigt.`);
       }
@@ -101,6 +105,7 @@
         tabs.forEach((t) => t.setAttribute("aria-selected", "false"));
         tab.setAttribute("aria-selected", "true");
         panels.forEach((p) => (p.hidden = `tab-${tab.dataset.tab}` !== p.id));
+        if (tab.dataset.tab === "settings") renderSettings();
       });
     });
   }
@@ -829,6 +834,163 @@
     document.body.classList.remove("ss-detail-open");
     // Restore the scroll position the user had before opening the modal.
     window.scrollTo(0, savedScrollY);
+  }
+
+  // ----- Settings tab ----------------------------------------------
+
+  const PROVIDER_CHOICES = ["voe", "vidoza", "streamtape", "doodstream", "speedfiles", "filemoon", "vidmoly"];
+
+  async function renderSettings() {
+    const host = document.querySelector("#ss-settings");
+    host.innerHTML = '<div class="settings__loading">Lade Einstellungen…</div>';
+    let data;
+    try {
+      data = await api.settingsGet();
+    } catch (err) {
+      host.innerHTML = `<div class="empty">Konnte Einstellungen nicht laden: ${err.message}</div>`;
+      return;
+    }
+    host.innerHTML = "";
+    host.appendChild(buildSettingsForm(data));
+  }
+
+  function buildSettingsForm(data) {
+    const wrap = document.createElement("div");
+    wrap.className = "settings";
+
+    // --- Section: Daemon-Info (read-only) ---
+    const info = document.createElement("section");
+    info.className = "settings__section";
+    info.innerHTML = `<h3>Daemon</h3>`;
+    const dl = document.createElement("dl");
+    dl.className = "settings__info";
+    [
+      ["Home", data.paths.home],
+      ["Downloads", data.paths.downloads],
+      ["Library", data.paths.library],
+      ["Config-Datei", data.paths.config_file],
+    ].forEach(([k, v]) => {
+      const dt = document.createElement("dt"); dt.textContent = k;
+      const dd = document.createElement("dd"); dd.textContent = v;
+      dl.appendChild(dt); dl.appendChild(dd);
+    });
+    info.appendChild(dl);
+    wrap.appendChild(info);
+
+    // --- Section: Downloads ---
+    const dlSection = document.createElement("section");
+    dlSection.className = "settings__section";
+    dlSection.innerHTML = `<h3>Downloads</h3>`;
+
+    const providerLabel = labeledField("Bevorzugter Provider", "preferred_provider");
+    const providerSelect = document.createElement("select");
+    providerSelect.id = "settings-preferred-provider";
+    PROVIDER_CHOICES.forEach((p) => {
+      const o = document.createElement("option");
+      o.value = p; o.textContent = p;
+      if (data.config.preferred_provider === p) o.selected = true;
+      providerSelect.appendChild(o);
+    });
+    providerLabel.appendChild(providerSelect);
+    dlSection.appendChild(providerLabel);
+
+    const concLabel = labeledField("Max. parallele Downloads", "max_concurrent");
+    const concInput = document.createElement("input");
+    concInput.type = "number"; concInput.id = "settings-max-concurrent";
+    concInput.min = "1"; concInput.max = "10";
+    concInput.value = data.config.max_concurrent ?? 5;
+    concLabel.appendChild(concInput);
+    dlSection.appendChild(concLabel);
+
+    const retryLabel = labeledField("Max. Retry-Versuche", "max_retries");
+    const retryInput = document.createElement("input");
+    retryInput.type = "number"; retryInput.id = "settings-max-retries";
+    retryInput.min = "0"; retryInput.max = "10";
+    retryInput.value = data.config.max_retries ?? 3;
+    retryLabel.appendChild(retryInput);
+    dlSection.appendChild(retryLabel);
+
+    wrap.appendChild(dlSection);
+
+    // --- Section: Metadata ---
+    const meta = document.createElement("section");
+    meta.className = "settings__section";
+    meta.innerHTML = `<h3>Metadaten</h3>`;
+
+    const tmdbLabel = labeledField(
+      `TMDb API-Key${data.credentials.tmdb ? " (gesetzt — leer lassen, um beizubehalten)" : ""}`,
+      "tmdb_api_key"
+    );
+    const tmdbInput = document.createElement("input");
+    tmdbInput.type = "password";
+    tmdbInput.id = "settings-tmdb-key";
+    tmdbInput.placeholder = data.credentials.tmdb
+      ? "•••••••••• (gesetzt)"
+      : "Schlüssel aus themoviedb.org";
+    tmdbLabel.appendChild(tmdbInput);
+    meta.appendChild(tmdbLabel);
+
+    const hint = document.createElement("p");
+    hint.className = "settings__hint";
+    hint.innerHTML = `TMDb-Key holen → <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener">themoviedb.org/settings/api</a>. Ohne Key fallen Stream-Ketten auf AniList/Jikan/TVmaze zurück (kein FSK).`;
+    meta.appendChild(hint);
+
+    wrap.appendChild(meta);
+
+    // --- Save row ---
+    const actions = document.createElement("div");
+    actions.className = "settings__actions";
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "button";
+    saveBtn.className = "detail__primary";
+    saveBtn.textContent = "Speichern";
+    const status = document.createElement("span");
+    status.className = "settings__status";
+
+    saveBtn.addEventListener("click", async () => {
+      saveBtn.disabled = true;
+      saveBtn.textContent = "Speichere…";
+      status.textContent = "";
+      const payload = {
+        config: {
+          preferred_provider: providerSelect.value,
+          max_concurrent: parseInt(concInput.value, 10) || 5,
+          max_retries: parseInt(retryInput.value, 10) || 3,
+        },
+      };
+      const tmdb = tmdbInput.value.trim();
+      if (tmdb) payload.tmdb_api_key = tmdb;
+      try {
+        await api.settingsPatch(payload);
+        status.textContent = "Gespeichert ✓";
+        status.style.color = "var(--success)";
+        tmdbInput.value = "";
+        // Re-render so the "(gesetzt)" hint reflects reality
+        setTimeout(renderSettings, 800);
+      } catch (err) {
+        status.textContent = `✕ ${err.message || "Fehler"}`;
+        status.style.color = "var(--danger)";
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = "Speichern";
+      }
+    });
+
+    actions.appendChild(saveBtn);
+    actions.appendChild(status);
+    wrap.appendChild(actions);
+
+    return wrap;
+  }
+
+  function labeledField(text, htmlForId) {
+    const lbl = document.createElement("label");
+    lbl.className = "settings__field";
+    const span = document.createElement("span");
+    span.textContent = text;
+    lbl.appendChild(span);
+    if (htmlForId) lbl.htmlFor = `settings-${htmlForId.replace(/_/g, "-")}`;
+    return lbl;
   }
 
   function wireDetailModal() {

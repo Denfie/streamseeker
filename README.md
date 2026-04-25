@@ -5,14 +5,21 @@ Dein persönlicher Tracker für Serien, Animes und Filme auf **aniworld.to**,
 auf, sieh auf einen Blick wo es neue Staffeln oder Episoden gibt, und spring
 mit einem Klick direkt auf die Serien-Seite.
 
-StreamSeeker besteht aus drei Teilen:
+StreamSeeker besteht aus drei Teilen, die dieselbe Funktionalität anbieten —
+**du wählst nur, ob du sie über das Terminal oder den Browser bedienen willst**:
 
 1. **CLI** (Python) — Kernstück, läuft lokal auf macOS, Linux und Windows.
-2. **Daemon** — optionaler Hintergrunddienst mit lokaler HTTP-API
-   (`http://127.0.0.1:8765`), über den die Browser-Extension spricht.
-3. **Chrome-Extension** — zeigt direkt auf aniworld.to / s.to / megakino.tax
-   den Status deiner Serien an (Favorit, in Sammlung, neue Episoden) und
-   stellt ein Popup mit Detail-Ansicht, Suche und Metadaten bereit.
+2. **Daemon** — Hintergrunddienst mit lokaler HTTP-API
+   (`http://127.0.0.1:8765`), die als gemeinsame Schnittstelle für CLI
+   und Extension fungiert.
+3. **Chrome-Extension** — bietet **denselben Funktionsumfang wie die CLI**
+   direkt im Browser: Sammlung pflegen, Favoriten setzen, Updates
+   erkennen, Episoden gezielt zur Bearbeitung markieren, Metadaten
+   verwalten, lokalen Sammlungsordner öffnen.
+
+Beide Oberflächen greifen auf denselben Datenbestand unter
+`~/.streamseeker/` zu — alles, was du im Terminal anlegst, ist sofort
+auch in der Extension sichtbar und umgekehrt.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/denfie/streamseeker/master/assets/usage-v-0-1-5.gif" alt="Streamseeker usage" width="800"/>

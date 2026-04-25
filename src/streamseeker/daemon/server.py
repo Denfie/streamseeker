@@ -345,6 +345,89 @@ def create_app() -> FastAPI:
         return _DASHBOARD_HTML
 
     # -----------------------------------------------------------------
+    # Settings — exposes config.json + credentials presence to the
+    # extension's Settings tab. We deliberately never return raw API
+    # keys: the UI only needs to know whether one is set.
+    # -----------------------------------------------------------------
+
+    # Allow-list of config.json keys the extension may write to. Anything
+    # outside this list is silently dropped on PATCH so a compromised
+    # extension can't, e.g., flip output_folder to /tmp/evil.
+    _SETTINGS_WRITABLE = {
+        "preferred_provider",
+        "max_concurrent",
+        "max_retries",
+        "ddos_limit",
+        "ddos_timer",
+    }
+
+    def _read_config_safely() -> dict:
+        cfg_file = paths.config_file()
+        if not cfg_file.is_file():
+            return {}
+        try:
+            return json.loads(cfg_file.read_text())
+        except (json.JSONDecodeError, OSError):
+            return {}
+
+    def _write_config(data: dict) -> None:
+        from streamseeker.api.core.library.store import _atomic_write_json  # type: ignore
+        _atomic_write_json(paths.config_file(), data)
+
+    @app.get("/settings")
+    def settings_get() -> dict:
+        cfg = _read_config_safely()
+        creds = paths.load_credentials()
+        return {
+            "config": cfg,
+            "credentials": {
+                # Boolean flags only — never echo the actual key.
+                "tmdb": bool(creds.get("tmdb_api_key")),
+            },
+            "paths": {
+                "home": str(paths.home()),
+                "config_file": str(paths.config_file()),
+                "credentials_file": str(paths.credentials_file()),
+                "downloads": str(paths.downloads_dir()),
+                "library": str(paths.library_dir()),
+            },
+            "writable_keys": sorted(_SETTINGS_WRITABLE),
+        }
+
+    class SettingsPatch(BaseModel):
+        config: Optional[dict] = None
+        tmdb_api_key: Optional[str] = None
+
+    @app.patch("/settings")
+    def settings_patch(body: SettingsPatch) -> dict:
+        applied: dict = {}
+        if body.config:
+            cfg = _read_config_safely()
+            for k, v in body.config.items():
+                if k not in _SETTINGS_WRITABLE:
+                    continue
+                cfg[k] = v
+                applied[k] = v
+            _write_config(cfg)
+
+        if body.tmdb_api_key is not None:
+            creds_file = paths.credentials_file()
+            current = paths.load_credentials() if creds_file.is_file() else {}
+            if body.tmdb_api_key.strip() == "":
+                current.pop("tmdb_api_key", None)
+            else:
+                current["tmdb_api_key"] = body.tmdb_api_key.strip()
+            creds_file.parent.mkdir(parents=True, exist_ok=True)
+            creds_file.write_text(json.dumps(current, indent=2))
+            try:
+                creds_file.chmod(0o600)
+            except OSError:
+                pass
+            applied["tmdb_api_key"] = "(updated)"
+
+        return {"applied": applied}
+
+    # -----------------------------------------------------------------
     # Series structure (scope picker in the extension modal)
     # -----------------------------------------------------------------
 
