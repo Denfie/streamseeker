@@ -119,7 +119,7 @@ class StreamseekerHandler(BaseClass):
                 except LinkUrlError as e:
                     logger.error(f"{e}")
                 except DownloadExistsError as e:
-                    logger.error(f"<success>File was downloaded before</success>")
+                    logger.error(f"<success>Bereits in der Sammlung vorhanden</success>")
                     pass
             case _:
                 return None

@@ -132,14 +132,14 @@ class StoDownloadCommand:
                 self.stream.get_name(), preferred_provider, show.get('link'),
                 language, show_type, season, episode
             )
-            self.cli.line("<info>1 download added to queue.</info>")
+            self.cli.line("<info>1 Eintrag zur Sammlung hinzugefügt.</info>")
         elif download_mode == "season":
             count = streamseek_handler.enqueue_all(
                 self.stream.get_name(), preferred_provider, show.get('link'),
                 language, show_type, season, 0,
                 seasons_list=[season],
             )
-            self.cli.line(f"<info>{count} download(s) added to queue.</info>")
+            self.cli.line(f"<info>{count} Einträge zur Sammlung hinzugefügt.</info>")
         elif download_mode == "season_from":
             count = streamseek_handler.enqueue_all(
                 self.stream.get_name(), preferred_provider, show.get('link'),
@@ -147,7 +147,7 @@ class StoDownloadCommand:
                 seasons_list=[season],
                 episodes_list=episodes,
             )
-            self.cli.line(f"<info>{count} download(s) added to queue.</info>")
+            self.cli.line(f"<info>{count} Einträge zur Sammlung hinzugefügt.</info>")
         elif download_mode == "all":
             count = streamseek_handler.enqueue_all(
                 self.stream.get_name(), preferred_provider, show.get('link'),
@@ -155,7 +155,7 @@ class StoDownloadCommand:
                 seasons_list=show_info.get('series') or show_info.get('movies'),
                 episodes_list=episodes,
             )
-            self.cli.line(f"<info>{count} download(s) added to queue.</info>")
+            self.cli.line(f"<info>{count} Einträge zur Sammlung hinzugefügt.</info>")
 
         QueueProcessor().start(config=streamseek_handler.config)
 

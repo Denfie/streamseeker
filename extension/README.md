@@ -30,15 +30,18 @@ Auto-Install gibt's in **Paket H** via `streamseeker install-extension`.
 
 ### Auf Serien-Seiten
 - **★ / ☆** neben dem Titel — Favorit toggle.
-- **Download-Badge** neben dem Titel — aggregierter Status über alle Staffeln.
-- **Pro Staffel-Link** — Badge mit Fortschritt `3/12` und Download-Icon.
-  Klick reiht die komplette Staffel in die Queue.
-- **Pro Episoden-Link** — Download-Icon; Klick reiht genau die Episode ein.
+- **Sammlungs-Badge** neben dem Titel — aggregierter Status über alle
+  Staffeln (vollständig / teilweise / leer).
+- **Pro Staffel-Link** — Badge mit Fortschritt `3/12` und Status-Icon.
+  Klick reiht die komplette Staffel zur Bearbeitung ein.
+- **Pro Episoden-Link** — Status-Icon; Klick reiht genau die Episode ein.
 
 ### Popup (Klick auf das Extension-Icon)
-- **Status** — aktive Downloads mit Progressbar, Summary, Queue.
-- **Library** — durchsuchbare Liste heruntergeladener Serien (mit Cover).
-- **Favoriten** — durchsuchbare Liste + Button „→ Library" (Promote).
+- **Status** — aktive Vorgänge mit Progressbar, Summary, Queue.
+- **Sammlung** — durchsuchbare Liste, mit Cover, FSK-Badges, Filtern auf
+  Plattform und Favoriten, Detail-Modal mit Metadaten.
+- **Settings** — Daemon-Pfade, Provider, max. parallele Aktivitäten,
+  TMDb-Key.
 
 ## Troubleshooting
 

@@ -73,10 +73,10 @@ class DownloaderStandard:
                         time.sleep(20)
                         continue
 
-                logger.error(f"Server error. Could not download {path}. Please try to download it later.")
+                logger.error(f"Server error bei {path}. Bitte sp\u00e4ter erneut versuchen.")
                 helper.download_error(path, url)
                 self._manager.report_failure(path)
-                logger.error(f"\u274c {display_name} \u2014 Download failed (HTTP {code})")
+                logger.error(f"\u274c {display_name} \u2014 Verarbeitung fehlgeschlagen (HTTP {code})")
                 return
             except Exception:
                 pass
@@ -84,7 +84,7 @@ class DownloaderStandard:
         # All retries exhausted
         helper.download_error(path, url)
         self._manager.report_failure(path)
-        logger.error(f"\u274c {display_name} \u2014 Download failed after {self.retries} attempts")
+        logger.error(f"\u274c {display_name} \u2014 Verarbeitung nach {self.retries} Versuchen fehlgeschlagen")
 
     def _download_file(self, url: str, path: str):
         file_name = os.path.basename(path)

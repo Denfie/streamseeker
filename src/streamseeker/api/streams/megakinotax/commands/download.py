@@ -29,7 +29,7 @@ class MegakinotaxDownloadCommand:
             self.stream.get_name(), 'voe', movie.get('name'),
             'de', 'movie', 0, 0, url=movie.get('href')
         )
-        self.cli.line("<info>1 download added to queue.</info>")
+        self.cli.line("<info>1 Eintrag zur Sammlung hinzugefügt.</info>")
 
         QueueProcessor().start(config=streamseek_handler.config)
 
