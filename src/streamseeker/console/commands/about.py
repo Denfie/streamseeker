@@ -16,7 +16,7 @@ class AboutCommand(Command):
 
 Version: <info>{get_version()}</info>
 
-<comment>Streamseeker works currently with <fg=blue>AniWorld</>, <fg=blue>Serien Stream</> and <fg=blue>MegaKino</>.
+<comment>Streamseeker works currently with <fg=blue>AniWorld</> and <fg=blue>Serien Stream</>.
 See <fg=blue>https://github.com/uniprank/streamseeker</> for more information.</comment>\
 """
         )

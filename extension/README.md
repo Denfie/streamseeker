@@ -1,8 +1,8 @@
 # StreamSeeker — Chrome/Brave/Edge Extension
 
 Browser-Add-on, das StreamSeeker direkt auf den unterstützten Stream-Seiten
-(`aniworld.to`, `s.to`, `megakino.tax`) einblendet. Die Extension
-kommuniziert ausschließlich mit dem lokalen **StreamSeeker-Daemon** auf
+(`aniworld.to`, `s.to`) einblendet. Die Extension kommuniziert
+ausschließlich mit dem lokalen **StreamSeeker-Daemon** auf
 `http://127.0.0.1:8765` — ohne laufenden Daemon ist sie nutzlos.
 
 ## Voraussetzungen
@@ -63,7 +63,7 @@ Auto-Install gibt's in **Paket H** via `streamseeker install-extension`.
 ## Sicherheit
 
 - Die Extension macht **keine** ausgehenden Requests außer zu `127.0.0.1:8765`
-  und den drei Stream-Domains. Siehe `host_permissions` in `manifest.json`.
+  und den unterstützten Stream-Domains. Siehe `host_permissions` in `manifest.json`.
 - Alle Mutationen (Queue, Favoriten, Library) laufen über den Daemon — die
   Extension schreibt **nie** direkt in Dateien.
 - Kein Telemetry, keine Analytics.

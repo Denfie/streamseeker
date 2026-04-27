@@ -12,7 +12,7 @@ class FavoriteAddCommand(Command):
     description = "Add a series/movie to the Favorites list."
 
     arguments = [
-        argument("stream", "Stream name (e.g. aniworldto, sto, megakinotax)."),
+        argument("stream", "Stream name (e.g. aniworldto, sto)."),
         argument("slug", "Series/movie slug (e.g. oshi-no-ko)."),
     ]
 

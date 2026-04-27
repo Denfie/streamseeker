@@ -16,7 +16,6 @@ Path conventions we derive stream/slug/season/episode from (mirrors
     downloads/anime/<slug>/movies/<slug>-movie-<N>-<lang>.mp4       (aniworldto filme)
     downloads/serie/<slug>/Season <N>/<slug>-s<N>e<M>-<lang>.mp4   (sto staffel)
     downloads/serie/<slug>/movies/<slug>-movie-<N>-<lang>.mp4       (sto filme)
-    downloads/movies/megakinotax/<slug>-<lang>.mp4                  (megakinotax)
 
 Everything that doesn't match is reported as ``skipped`` so the user can
 inspect them.
@@ -64,8 +63,6 @@ def classify_path(path: str) -> RescanItem | None:
     if "serie" in parts:
         i = parts.index("serie")
         return _classify_series(parts, i, stream="sto")
-    if "movies" in parts and "megakinotax" in parts:
-        return _classify_megakinotax(parts)
     return None
 
 
@@ -95,20 +92,6 @@ def _classify_series(parts: list[str], stream_idx: int, *, stream: str) -> Resca
         )
 
     return None
-
-
-def _classify_megakinotax(parts: list[str]) -> RescanItem | None:
-    """downloads/movies/megakinotax/<slug>-<lang>.mp4 — slug is what stays after
-    stripping a trailing -<language>.mp4."""
-    filename = parts[-1]
-    base = filename.rsplit(".", 1)[0]          # strip .mp4
-    slug = base.rsplit("-", 1)[0] or base       # strip -<lang>
-    if not slug:
-        return None
-    return RescanItem(
-        stream="megakinotax", slug=slug, type="filme",
-        episode=1,
-    )
 
 
 # ---------- The rescan driver ---------------------------------------

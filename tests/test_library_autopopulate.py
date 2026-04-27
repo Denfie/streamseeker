@@ -71,13 +71,13 @@ def test_report_success_removes_item_from_queue() -> None:
 def test_report_success_handles_movie_type() -> None:
     manager = DownloadManager()
     _enqueue_episode(
-        manager, "dune.mp4",
-        stream="megakinotax", slug="dune-part-two",
+        manager, "your-name.mp4",
+        stream="aniworldto", slug="your-name",
         season=0, episode=1, type_="filme",
     )
-    manager.report_success("dune.mp4")
+    manager.report_success("your-name.mp4")
 
-    entry = LibraryStore().get(KIND_LIBRARY, "megakinotax::dune-part-two")
+    entry = LibraryStore().get(KIND_LIBRARY, "aniworldto::your-name")
     assert entry is not None
     assert entry["movies"]["downloaded"] == [1]
     assert entry["seasons"] == {}

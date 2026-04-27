@@ -11,6 +11,7 @@ The browser extension is released independently; see `extension/CHANGELOG.md`.
 ## [Unreleased]
 
 ### Added
+
 - **TMDb-Metadaten zweisprachig.** Der TMDb-Provider holt nun für jede
   Serie/Film zwei Sprachen: `en-US` als Top-Level (Universal-Fallback)
   und `de-DE` als Translation unter `external.tmdb.translations.de`.
@@ -49,6 +50,7 @@ The browser extension is released independently; see `extension/CHANGELOG.md`.
   zusätzlich `extension`-Feld.
 
 ### Fixed
+
 - **`/events` (SSE) schickt alle 20s eine Keepalive-Kommentarzeile.**
   Verhindert, dass der MV3-Service-Worker der Browser-Extension bei
   ruhiger Queue nach 30s ohne Netzwerk-Traffic eingefroren wird —
@@ -56,6 +58,7 @@ The browser extension is released independently; see `extension/CHANGELOG.md`.
   Live-Updates mehr bekamen.
 
 ### Added
+
 - **Daemon-Watchdog gegen Hänger.** Neuer Thread im Daemon pingt
   alle 30s den eigenen `GET /health`-Endpoint. Nach 3 aufeinander
   folgenden Fehlern (Timeout, Connection refused, 5xx) ruft der
@@ -83,19 +86,21 @@ The browser extension is released independently; see `extension/CHANGELOG.md`.
   werden serverseitig verworfen.
 
 ### Security
+
 - **11 Dependabot-Alerts geschlossen** — Dependency-Minima in
   `pyproject.toml` so hochgezogen, dass alle aktuell betroffenen
   Versionen ausgeschlossen sind:
-  - `Pillow >=12.2.0,<13` (FITS GZIP-Bomb GHSA-pp2g-v4x7-f2qw,
-    PSD OOB-Write GHSA-2j2x-2gpw-g8fm)
-  - `requests >=2.33.0,<3` (.netrc-Leak, Temp-File-Reuse)
-  - `pytest >=9.0.3,<10` (tmpdir-Race)
-  - Explizite transitive Pins: `urllib3 >=2.6.3,<3`
-    (Decompression-Bomb CVE-2025-50182) und `h11 >=0.16.0,<1`
-    (Chunked-Encoding CVE-2025-43859) — obwohl transitiv, pinnen wir
-    sie direkt, damit dependabot sie nicht immer wieder flagged.
+    - `Pillow >=12.2.0,<13` (FITS GZIP-Bomb GHSA-pp2g-v4x7-f2qw,
+      PSD OOB-Write GHSA-2j2x-2gpw-g8fm)
+    - `requests >=2.33.0,<3` (.netrc-Leak, Temp-File-Reuse)
+    - `pytest >=9.0.3,<10` (tmpdir-Race)
+    - Explizite transitive Pins: `urllib3 >=2.6.3,<3`
+      (Decompression-Bomb CVE-2025-50182) und `h11 >=0.16.0,<1`
+      (Chunked-Encoding CVE-2025-43859) — obwohl transitiv, pinnen wir
+      sie direkt, damit dependabot sie nicht immer wieder flagged.
 
 ### Changed
+
 - **Poetry raus, PEP 621 rein.** `pyproject.toml` nutzt jetzt den
   Standard-`[project]`-Table; Build-Backend ist `hatchling`. `poetry.lock`
   und alle `poetry`/`poetry-core`-Referenzen sind weg. Install jetzt via
@@ -107,6 +112,7 @@ The browser extension is released independently; see `extension/CHANGELOG.md`.
   `[project].version` (mit Legacy-`[tool.poetry]`-Fallback).
 
 ### Fixed
+
 - **pipx-Install funktioniert jetzt.** `get_version()` hat vorher
   `pyproject.toml` aus einem relativen Checkout-Pfad gelesen und in
   jedem installierten Paket (pipx, pip, wheel) mit `FileNotFoundError`
@@ -115,6 +121,7 @@ The browser extension is released independently; see `extension/CHANGELOG.md`.
   Fallback nur wenn das Paket nicht installiert ist.
 
 ### Performance
+
 - **Content-Script-Check (`GET /library/state`) blockiert nicht mehr
   während Downloads.** Wenn mehrere Downloads parallel laufen und
   Post-Success-Enrichment-Threads die Library-Lock halten, wartete das
@@ -126,6 +133,7 @@ The browser extension is released independently; see `extension/CHANGELOG.md`.
   das Cache-Fenster ist nur für initiale Page-Loads relevant.
 
 ### Fixed
+
 - **Library-Index wird nie mehr geschrumpft gespeichert.** Vorher konnte
   ein stummer Lesefehler oder Multi-Prozess-Race dazu führen, dass ein
   Schreibvorgang einen fast leeren Index zurückschrieb und der User
@@ -141,6 +149,7 @@ The browser extension is released independently; see `extension/CHANGELOG.md`.
 ## [0.2.0] — 2026-04-24
 
 ### Added
+
 - Central path module `streamseeker.paths` — all runtime data now resolves under
   `~/.streamseeker/` (overridable via `STREAMSEEKER_HOME` environment variable).
 - `streamseeker migrate` command — moves legacy in-project `logs/`, `downloads/`,
@@ -166,7 +175,7 @@ The browser extension is released independently; see `extension/CHANGELOG.md`.
   Python dependencies: `fastapi`, `uvicorn[standard]` (and `httpx` for tests).
   HTTP endpoints: `GET /version`, `GET /status`, `GET/POST /queue`,
   `GET /library`, `GET /library/{key}`, `GET /library/state`, `GET/POST/DELETE
-  /favorites`, `POST /favorites/{key}/promote`, `GET /events` (SSE), plus a
+/favorites`, `POST /favorites/{key}/promote`, `GET /events` (SSE), plus a
   minimal `GET /` HTML dashboard. CORS is open for `localhost` and
   `chrome-extension://` origins.
 - Daemon lifecycle commands: `streamseeker daemon start|stop|status|logs` with
@@ -235,6 +244,7 @@ The browser extension is released independently; see `extension/CHANGELOG.md`.
   otherwise a Pillow placeholder fallback keeps the build reproducible.
 
 ### Changed
+
 - Download queue view in `run` command now groups non-active items by series title
   (e.g. `Dandadan (7)`) instead of listing every episode individually — prevents
   terminal overflow when large queues are loaded.
@@ -246,16 +256,19 @@ The browser extension is released independently; see `extension/CHANGELOG.md`.
   regardless of the current working directory.
 
 ### Internal
+
 - Test suite runs against a temporary `STREAMSEEKER_HOME` — no test writes to the
   real user home anymore.
 
 ## [0.1.5] — 2026-04-11
 
 ### Added
+
 - Queue-based download orchestration via `DownloadManager` and `QueueProcessor`.
 - `retry` command to re-queue failed downloads.
 
 ### Fixed
+
 - Various logging improvements and provider bug fixes.
 
 ## [0.1.4] and earlier

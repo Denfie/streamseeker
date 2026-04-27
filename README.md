@@ -1,9 +1,29 @@
 # StreamSeeker
 
-Dein persönlicher Tracker für Serien, Animes und Filme auf **aniworld.to**,
-**s.to** und **megakino.tax**. Markiere Favoriten, baue eine eigene Sammlung
-auf, sieh auf einen Blick wo es neue Staffeln oder Episoden gibt, und spring
-mit einem Klick direkt auf die Serien-Seite.
+Dein persönlicher Tracker für Serien, Animes und Filme auf **aniworld.to**
+und **s.to**. Markiere Favoriten, baue eine eigene Sammlung auf, sieh auf
+einen Blick wo es neue Staffeln oder Episoden gibt, und spring mit einem
+Klick direkt auf die Serien-Seite.
+
+## Inhalt
+
+- [StreamSeeker](#streamseeker)
+    - [Inhalt](#inhalt)
+    - [Features](#features)
+    - [Installation](#installation)
+        - [Voraussetzungen](#voraussetzungen)
+        - [StreamSeeker benutzen](#streamseeker-benutzen)
+            - [Variante A — pipx (empfohlen)](#variante-a--pipx-empfohlen)
+            - [Variante B — Editable pip install (für Entwickler)](#variante-b--editable-pip-install-für-entwickler)
+        - [Datenablage](#datenablage)
+        - [Daemon starten](#daemon-starten)
+        - [Chrome-Extension installieren](#chrome-extension-installieren)
+            - [So sieht das in der Praxis aus](#so-sieht-das-in-der-praxis-aus)
+        - [Optional: TMDb-API-Key für Metadaten](#optional-tmdb-api-key-für-metadaten)
+    - [CLI-Befehle (Auszug)](#cli-befehle-auszug)
+    - [Unterstützte Plattformen](#unterstützte-plattformen)
+    - [Rechtlicher Hinweis](#rechtlicher-hinweis)
+    - [Lizenz](#lizenz)
 
 StreamSeeker besteht aus drei Teilen, die dieselbe Funktionalität anbieten —
 **du wählst nur, ob du sie über das Terminal oder den Browser bedienen willst**:
@@ -38,7 +58,7 @@ auch in der Extension sichtbar und umgekehrt.
   FSK-Badges (wenn ein TMDb-Key konfiguriert ist). Provider-Kette pro
   Plattform konfigurierbar: AniList / Jikan / TMDb / TVmaze.
 - **Quick-Jump** — Klick auf einen Sammlungs-Eintrag öffnet direkt die
-  Seite bei aniworld.to / s.to / megakino.tax.
+  Seite bei aniworld.to / s.to.
 - **Status-Indikatoren direkt auf der Quell-Seite** — Staffel-Badges,
   Episoden-Icons und Favoriten-Stern werden per Content-Script in die
   Original-Seite eingeblendet.
@@ -160,7 +180,7 @@ Das Command kopiert die Extension nach `~/.streamseeker/extension/` und
    keine Badges/Icons.
 
 Nach der ersten Installation kann es nötig sein, bereits geöffnete
-Tabs von aniworld.to / s.to / megakino.tax einmal neu zu laden, damit
+Tabs von aniworld.to / s.to einmal neu zu laden, damit
 die Content-Scripts greifen. Danach: Favoriten-Stern neben dem Serien-
 Titel, Staffel-/Episoden-Badges in der Übersicht, Klick aufs Extension-
 Icon öffnet das Popup mit Sammlung, Status und Updates.
@@ -226,7 +246,6 @@ Volle Befehlsliste: `streamseeker --help`.
 
 - **AniWorld** (aniworld.to)
 - **Serie Stream** (s.to)
-- **MegaKino** (megakino.tax)
 
 ## Rechtlicher Hinweis
 

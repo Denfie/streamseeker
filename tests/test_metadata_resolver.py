@@ -48,7 +48,6 @@ def sandbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     _write_config(
         aniworldto=["anilist"],
         sto=["tmdb"],
-        megakinotax=["tmdb"],
     )
     yield
     Singleton._instances.pop(LibraryStore, None)
@@ -80,7 +79,6 @@ def test_default_chains_match_adr_expectations() -> None:
     paths.config_file().unlink()
     assert chain_for("aniworldto") == ["anilist", "jikan", "tmdb"]
     assert chain_for("sto") == ["tmdb", "tvmaze"]
-    assert chain_for("megakinotax") == ["tmdb"]
     assert chain_for("unknown") == []
 
 

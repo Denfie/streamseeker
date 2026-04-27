@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "StreamSeeker",
   "short_name": "StreamSeeker",
-  "description": "Track your favourite series and movies on aniworld.to, s.to and megakino.tax.",
-  "version": "0.19.1",
+  "description": "Track your favourite series and movies on aniworld.to and s.to.",
+  "version": "0.20.0",
   "minimum_chrome_version": "116",
 
   "minCliVersion": "0.2.0",
@@ -12,8 +12,7 @@
   "host_permissions": [
     "http://127.0.0.1:8765/*",
     "https://aniworld.to/*",
-    "https://s.to/*",
-    "https://megakino.tax/*"
+    "https://s.to/*"
   ],
 
   "background": {
@@ -38,19 +37,13 @@
       "js": ["lib/api.js", "content_scripts/common.js", "content_scripts/sto.js"],
       "css": ["content_scripts/overlay.css"],
       "run_at": "document_idle"
-    },
-    {
-      "matches": ["https://megakino.tax/*"],
-      "js": ["lib/api.js", "content_scripts/common.js", "content_scripts/megakinotax.js"],
-      "css": ["content_scripts/overlay.css"],
-      "run_at": "document_idle"
     }
   ],
 
   "web_accessible_resources": [
     {
       "resources": ["icons/svg/*.svg"],
-      "matches": ["https://aniworld.to/*", "https://s.to/*", "https://megakino.tax/*"]
+      "matches": ["https://aniworld.to/*", "https://s.to/*"]
     }
   ]
 }

@@ -307,7 +307,6 @@ def test_cors_allows_chrome_extension_origin(client: TestClient) -> None:
 @pytest.mark.parametrize("origin", [
     "https://aniworld.to",
     "https://s.to",
-    "https://megakino.tax",
 ])
 def test_cors_allows_stream_host_origins(client: TestClient, origin: str) -> None:
     """Manifest V3 content-scripts fetch with the host-page origin."""

@@ -43,11 +43,6 @@ def test_classify_aniworldto_filme() -> None:
     assert item == RescanItem("aniworldto", "some-anime", "filme", season=0, episode=1)
 
 
-def test_classify_megakinotax_movie() -> None:
-    item = classify_path("downloads/movies/megakinotax/dune-part-two-german.mp4")
-    assert item == RescanItem("megakinotax", "dune-part-two", "filme", season=0, episode=1)
-
-
 def test_classify_with_absolute_path() -> None:
     item = classify_path("/Users/me/.streamseeker/downloads/anime/foo/Season 1/foo-s1e1-de.mp4")
     assert item == RescanItem("aniworldto", "foo", "staffel", 1, 1)
@@ -90,12 +85,12 @@ def test_rescan_populates_library_from_log() -> None:
 
 def test_rescan_handles_movies() -> None:
     _write_success_log([
-        "[2026-04-23T10:00:00+00:00] downloads/movies/megakinotax/dune-part-two-german.mp4 :: size=5000",
+        "[2026-04-23T10:00:00+00:00] downloads/anime/some-anime/movies/some-anime-movie-1-german.mp4 :: size=5000",
     ])
     report = rescan_success_log()
     assert len(report.items) == 1
 
-    entry = LibraryStore().get(KIND_LIBRARY, "megakinotax::dune-part-two")
+    entry = LibraryStore().get(KIND_LIBRARY, "aniworldto::some-anime")
     assert entry["movies"]["downloaded"] == [1]
 
 

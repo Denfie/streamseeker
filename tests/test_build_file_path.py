@@ -1,7 +1,7 @@
 """
-Tests for build_file_path on AniworldtoStream, StoStream and MegakinotaxStream.
+Tests for build_file_path on AniworldtoStream and StoStream.
 
-All three stream classes (and their base class BaseClass) use the Singleton
+Both stream classes (and their base class BaseClass) use the Singleton
 metaclass, so each test fixture resets the relevant singleton and provides a
 minimal config via set_config().
 """
@@ -42,15 +42,6 @@ def sto():
     _reset_singleton(StoStream)
 
 
-@pytest.fixture()
-def megakino():
-    """Fresh MegakinotaxStream with a base config."""
-    from streamseeker.api.streams.megakinotax.megakinotax import MegakinotaxStream
-    _reset_singleton(MegakinotaxStream)
-    stream = MegakinotaxStream()
-    stream.set_config({"output_folder": "downloads"})
-    yield stream
-    _reset_singleton(MegakinotaxStream)
 
 
 # ---------------------------------------------------------------------------
@@ -157,41 +148,3 @@ def test_sto_staffel_path_uses_serie_subfolder(sto):
     assert "serie" in parts
 
 
-# ---------------------------------------------------------------------------
-# MegakinotaxStream tests
-# ---------------------------------------------------------------------------
-
-def test_megakinotax_movie_path(megakino):
-    result = megakino.build_file_path(
-        name="avatar", type="filme", season=0, episode=0, language="de"
-    )
-    expected = p("downloads", "movies", "megakinotax", "avatar-movie-de.mp4")
-    assert result == expected
-
-
-def test_megakinotax_uses_movies_megakinotax_subfolder(megakino):
-    result = megakino.build_file_path(
-        name="inception", type="filme", season=0, episode=0, language="en"
-    )
-    parts = result.split(os.sep)
-    assert "movies" in parts
-    assert "megakinotax" in parts
-
-
-def test_megakinotax_custom_output_folder(megakino):
-    megakino.set_config({"output_folder": "/videos"})
-    result = megakino.build_file_path(
-        name="tenet", type="filme", season=0, episode=0, language="de"
-    )
-    assert result.startswith(p("/videos", "movies", "megakinotax"))
-
-
-def test_megakinotax_language_appears_in_filename(megakino):
-    result_de = megakino.build_file_path(
-        name="dune", type="filme", season=0, episode=0, language="de"
-    )
-    result_en = megakino.build_file_path(
-        name="dune", type="filme", season=0, episode=0, language="en"
-    )
-    assert "dune-movie-de.mp4" in result_de
-    assert "dune-movie-en.mp4" in result_en

@@ -4,7 +4,6 @@ Stream-to-provider routing (ADRs 0007, 0008):
 
     aniworldto  → AniListProvider                 (anime)
     sto         → TmdbProvider (kind="tv")        (live-action series)
-    megakinotax → TmdbProvider (kind="movie")     (movies)
 
 Enrichment is additive: it writes under ``external.<provider>`` of the
 Library entry, downloads poster/backdrop into the series asset folder, and

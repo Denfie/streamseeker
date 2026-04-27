@@ -10,8 +10,7 @@ Chain config lives in ``~/.streamseeker/config.json``::
     {
       "metadata_chains": {
         "aniworldto": ["anilist", "tmdb"],
-        "sto":        ["tvdb", "tmdb"],
-        "megakinotax": ["tmdb"]
+        "sto":        ["tvdb", "tmdb"]
       }
     }
 
@@ -49,14 +48,12 @@ _FACTORIES: dict[str, callable] = {
 _DEFAULT_CHAINS: dict[str, list[str]] = {
     "aniworldto": ["anilist", "jikan", "tmdb"],
     "sto": ["tmdb", "tvmaze"],
-    "megakinotax": ["tmdb"],
 }
 
 # The "kind" hint passed to providers per stream ("tv" vs "movie").
 _STREAM_KINDS: dict[str, str] = {
     "aniworldto": "tv",
     "sto": "tv",
-    "megakinotax": "movie",
 }
 
 

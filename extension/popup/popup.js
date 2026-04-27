@@ -9,13 +9,11 @@
   const STREAM_LABELS = {
     aniworldto: "AniWorld",
     sto: "S.to",
-    megakinotax: "MegaKino",
   };
 
   const STREAM_URL_BUILDERS = {
     aniworldto: (slug) => `https://aniworld.to/anime/stream/${slug}`,
     sto: (slug) => `https://s.to/serie/${slug}`,
-    megakinotax: (slug) => `https://megakino.tax/${slug}.html`,
   };
 
   const libraryFilter = {
@@ -548,7 +546,6 @@
   function episodeUrlFor(stream, slug, season, episode) {
     const base = STREAM_URL_BUILDERS[stream] ? STREAM_URL_BUILDERS[stream](slug) : null;
     if (!base) return null;
-    if (stream === "megakinotax") return base;  // movies have no S/E segment
     if (season && episode) return `${base}/staffel-${season}/episode-${episode}`;
     if (season) return `${base}/staffel-${season}`;
     return base;

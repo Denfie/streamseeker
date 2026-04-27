@@ -108,7 +108,7 @@ class InstallExtensionCommand(Command):
         self.line("  1. In Chrome, toggle <comment>Developer Mode</comment> (top right).")
         self.line("  2. Click <comment>Load Unpacked</comment>.")
         self.line(f"  3. Select the folder: <comment>{target}</comment>")
-        self.line("  4. Visit an aniworld.to / s.to / megakino.tax page to see the badges.\n")
+        self.line("  4. Visit an aniworld.to / s.to page to see the badges.\n")
         self.line("Make sure the daemon is running:")
         self.line("  <comment>streamseeker daemon start</comment>")
 

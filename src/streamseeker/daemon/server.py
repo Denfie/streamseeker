@@ -255,7 +255,7 @@ def create_app() -> FastAPI:
             r"|moz-extension://.*"
             r"|http://127\.0\.0\.1(:\d+)?"
             r"|http://localhost(:\d+)?"
-            r"|https://(aniworld\.to|s\.to|megakino\.tax)"
+            r"|https://(aniworld\.to|s\.to)"
             r")$"
         ),
         allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
@@ -525,7 +525,7 @@ def create_app() -> FastAPI:
         types = list(info.get("types") or [])
         # ``search()`` already returns series/movies lists for aniworld+sto;
         # fall back to search_seasons() for streams that don't expose them
-        # directly (e.g. megakinotax).
+        # directly.
         seasons = list(info.get("series") or [])
         movies_list = list(info.get("movies") or [])
         if not seasons and ("staffel" in types or "serie" in types or "series" in types):
@@ -708,8 +708,8 @@ def create_app() -> FastAPI:
     def library_list() -> list[dict]:
         # Sort across all providers so the user sees one cohesive,
         # alphabetically-ordered list — by default the on-disk index is
-        # grouped by stream-dir (aniworldto, megakinotax, sto), which made
-        # later providers always appear at the bottom regardless of title.
+        # grouped by stream-dir (aniworldto, sto), which made later
+        # providers always appear at the bottom regardless of title.
         rows = LibraryStore().list(KIND_LIBRARY)
         return sorted(
             rows,
@@ -879,7 +879,6 @@ def create_app() -> FastAPI:
     _STREAM_TYPE_DIR = {
         "aniworldto": "anime",
         "sto": "serie",
-        "megakinotax": "movies/megakinotax",
     }
 
     def _downloads_folder_for(entry: dict) -> "Path":
@@ -889,11 +888,6 @@ def create_app() -> FastAPI:
         sub = _STREAM_TYPE_DIR.get(stream)
         if sub is None:
             return paths.downloads_dir()
-        # megakinotax dumps everything into /movies/megakinotax/ without
-        # a per-slug folder, so for that stream the show "folder" is the
-        # megakinotax dir itself.
-        if stream == "megakinotax":
-            return paths.downloads_dir() / sub
         return paths.downloads_dir() / sub / slug
 
     def _open_in_file_manager(path: "Path") -> str:

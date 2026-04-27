@@ -101,7 +101,7 @@ def test_build_signature_handles_movie_type() -> None:
     handler = MagicMock()
     handler.search.return_value = {"types": ["filme"], "series": [], "movies": [1, 2]}
 
-    sig = build_signature(handler, "megakinotax", "x")
+    sig = build_signature(handler, "aniworldto", "x")
     assert sig == {"seasons": {}, "movies": 2}
 
 
