@@ -18,7 +18,13 @@
     megakinotax: (slug) => `https://megakino.tax/${slug}.html`,
   };
 
-  const libraryFilter = { stream: null, favoritesOnly: false, rows: [] };
+  const libraryFilter = {
+    stream: null,
+    favoritesOnly: false,
+    fsk: null,
+    searchTerm: "",
+    rows: [],
+  };
   const UPDATE_LABELS = {
     new_season: (u) => `neue Staffel ${u.season}`,
     new_episode: (u) => `S${u.season}: +${(u.to || 0) - (u.from || 0)} Episode${((u.to || 0) - (u.from || 0)) === 1 ? "" : "n"}`,
@@ -31,6 +37,8 @@
     await loadActiveLanguage();
     wireTabs();
     wireSearch();
+    bindUpdatesToolbar();
+    bindLibraryFilterButton();
 
     try {
       const daemonAlive = await api.isDaemonAlive();
@@ -139,17 +147,12 @@
   }
 
   function wireSearch() {
-    document.querySelector("#ss-library-search")
-      .addEventListener("input", (e) => filterCards("#ss-library", e.target.value));
-  }
-
-  function filterCards(container, term) {
-    const needle = term.trim().toLowerCase();
-    const cards = document.querySelectorAll(`${container} .card`);
-    for (const card of cards) {
-      const title = card.dataset.title || "";
-      card.hidden = needle && !title.toLowerCase().includes(needle);
-    }
+    document.querySelector("#ss-library-search").addEventListener("input", (e) => {
+      libraryFilter.searchTerm = e.target.value || "";
+      const container = document.querySelector("#ss-library");
+      paintLibrary(container, libraryFilter);
+      updateFilterButtonState();
+    });
   }
 
   // ----- Status tab -------------------------------------------------
@@ -216,6 +219,7 @@
     const container = document.querySelector("#ss-updates");
     const tab = document.querySelector('[data-tab="updates"]');
     const badge = document.querySelector("#ss-updates-badge");
+    const toolbar = document.querySelector("#ss-updates-toolbar");
     container.innerHTML = "";
 
     pendingKeys = new Set((rows || []).map((r) => r.key));
@@ -223,16 +227,38 @@
     if (!rows || !rows.length) {
       tab.hidden = true;
       badge.classList.remove("is-visible");
+      if (toolbar) toolbar.hidden = true;
       return;
     }
 
     tab.hidden = false;
     badge.textContent = String(rows.length);
     badge.classList.add("is-visible");
+    if (toolbar) toolbar.hidden = false;
 
     for (const row of rows) {
       container.appendChild(renderUpdateCard(row));
     }
+  }
+
+  function bindUpdatesToolbar() {
+    const btn = document.querySelector("#ss-updates-dismiss-all");
+    if (!btn || btn.dataset.bound === "1") return;
+    btn.dataset.bound = "1";
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      try {
+        await api.updatesDismissAll();
+        const rows = await api.updatesList();
+        await renderUpdates(rows);
+        renderLibrary();
+        renderFavorites();
+      } catch (err) {
+        console.warn("[streamseeker] dismiss-all failed", err);
+      } finally {
+        btn.disabled = false;
+      }
+    });
   }
 
   function renderUpdateCard(row) {
@@ -277,8 +303,11 @@
     actions.className = "card__actions";
     const dismissBtn = document.createElement("button");
     dismissBtn.type = "button";
-    dismissBtn.textContent = "✓";
-    dismissBtn.title = "Als gesehen markieren";
+    dismissBtn.className = "updates__dismiss";
+    dismissBtn.textContent = window.ssI18n
+      ? window.ssI18n.t("updates.dismiss")
+      : "Als gelesen";
+    dismissBtn.title = dismissBtn.textContent;
     dismissBtn.addEventListener("click", async (ev) => {
       ev.stopPropagation();
       try {
@@ -303,8 +332,11 @@
     try {
       const rows = await api.libraryList();
       libraryFilter.rows = rows;
-      const repaint = () => paintLibrary(container, libraryFilter);
-      renderFilterChips("#ss-library-filter", rows, libraryFilter, repaint);
+      const repaint = () => {
+        paintLibrary(container, libraryFilter);
+        updateFilterButtonState();
+      };
+      renderFilterPopover("#ss-library-filter-popover", rows, libraryFilter, repaint);
       repaint();
     } catch (err) {
       container.innerHTML = `<div class="empty">${window.ssI18n.t("empty.collection_load_failed")}</div>`;
@@ -318,6 +350,16 @@
     let rows = filterState.rows;
     if (filterState.stream) rows = rows.filter((r) => r.stream === filterState.stream);
     if (filterState.favoritesOnly) rows = rows.filter((r) => r.favorite);
+    if (filterState.fsk != null) {
+      rows = rows.filter((r) => parseFskNumber(r.fsk) === filterState.fsk);
+    }
+    const needle = (filterState.searchTerm || "").trim().toLowerCase();
+    if (needle) {
+      rows = rows.filter((r) => {
+        const title = (r.title || r.slug || "").toLowerCase();
+        return title.includes(needle);
+      });
+    }
     if (!rows.length) {
       container.innerHTML = `<div class="empty">${window.ssI18n.t("empty.collection")}</div>`;
       return;
@@ -327,47 +369,175 @@
     }
   }
 
-  function renderFilterChips(selector, rows, filterState, onChange) {
+  // Strip "FSK " prefix and trailing punctuation; "FSK 12" → 12, "12" → 12,
+  // "TV-MA" → null. Keeps the filter robust against TMDb's free-form fields.
+  function parseFskNumber(raw) {
+    if (raw == null) return null;
+    const m = String(raw).match(/\d{1,2}/);
+    if (!m) return null;
+    const n = parseInt(m[0], 10);
+    return [0, 6, 12, 16, 18].includes(n) ? n : null;
+  }
+
+  function activeFilterCount(filterState) {
+    let c = 0;
+    if (filterState.stream) c++;
+    if (filterState.favoritesOnly) c++;
+    if (filterState.fsk != null) c++;
+    return c;
+  }
+
+  function updateFilterButtonState() {
+    const btn = document.querySelector("#ss-library-filter-btn");
+    if (!btn) return;
+    const dot = btn.querySelector(".library__filter-dot");
+    const c = activeFilterCount(libraryFilter);
+    if (dot) {
+      dot.hidden = c === 0;
+      dot.textContent = c > 0 ? String(c) : "";
+    }
+    btn.classList.toggle("library__filter-btn--active", c > 0);
+  }
+
+  function renderFilterPopover(selector, rows, filterState, onChange) {
     const host = document.querySelector(selector);
     host.innerHTML = "";
+
+    const t = window.ssI18n.t;
     const streams = Array.from(new Set(rows.map((r) => r.stream).filter(Boolean))).sort();
-    const hasFavorites = rows.some((r) => r.favorite);
-    if (streams.length < 2 && !hasFavorites) return;
+    const fskValues = Array.from(
+      new Set(rows.map((r) => parseFskNumber(r.fsk)).filter((n) => n != null))
+    ).sort((a, b) => a - b);
 
-    // ⭐ "Nur Favoriten" chip
-    if (hasFavorites) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "chip chip--fav";
-      btn.textContent = window.ssI18n.t("filter.favorites");
-      if (filterState.favoritesOnly) btn.classList.add("chip--active");
-      btn.addEventListener("click", () => {
-        filterState.favoritesOnly = !filterState.favoritesOnly;
-        btn.classList.toggle("chip--active", filterState.favoritesOnly);
-        onChange();
-      });
-      host.appendChild(btn);
-    }
-
-    if (streams.length < 2) return;
-
-    const addChip = (value, label) => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "chip";
-      btn.textContent = label;
-      if (filterState.stream === value) btn.classList.add("chip--active");
-      btn.addEventListener("click", () => {
-        filterState.stream = value;
-        host.querySelectorAll(".chip:not(.chip--fav)").forEach((c) => c.classList.remove("chip--active"));
-        btn.classList.add("chip--active");
-        onChange();
-      });
-      host.appendChild(btn);
+    const addSection = (titleKey, controls) => {
+      if (!controls.length) return;
+      const section = document.createElement("div");
+      section.className = "library__filter-section";
+      const heading = document.createElement("div");
+      heading.className = "library__filter-heading";
+      heading.textContent = t(titleKey);
+      section.appendChild(heading);
+      const group = document.createElement("div");
+      group.className = "library__filter-group";
+      controls.forEach((c) => group.appendChild(c));
+      section.appendChild(group);
+      host.appendChild(section);
     };
 
-    addChip(null, window.ssI18n.t("filter.all"));
-    for (const s of streams) addChip(s, STREAM_LABELS[s] || s);
+    const makeChip = (label, isActive, onClick, extraClass = "") => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `chip${isActive ? " chip--active" : ""}${extraClass ? " " + extraClass : ""}`;
+      btn.textContent = label;
+      btn.addEventListener("click", onClick);
+      return btn;
+    };
+
+    // Favorites toggle (only useful when at least one entry is starred)
+    if (rows.some((r) => r.favorite)) {
+      addSection("filter.section.favorites", [
+        makeChip(
+          t("filter.favorites"),
+          filterState.favoritesOnly,
+          () => {
+            filterState.favoritesOnly = !filterState.favoritesOnly;
+            renderFilterPopover(selector, rows, filterState, onChange);
+            onChange();
+          },
+          "chip--fav"
+        ),
+      ]);
+    }
+
+    // Stream
+    if (streams.length >= 2) {
+      const chips = [
+        makeChip(t("filter.all"), filterState.stream == null, () => {
+          filterState.stream = null;
+          renderFilterPopover(selector, rows, filterState, onChange);
+          onChange();
+        }),
+        ...streams.map((s) =>
+          makeChip(STREAM_LABELS[s] || s, filterState.stream === s, () => {
+            filterState.stream = s;
+            renderFilterPopover(selector, rows, filterState, onChange);
+            onChange();
+          })
+        ),
+      ];
+      addSection("filter.section.stream", chips);
+    }
+
+    // FSK
+    if (fskValues.length) {
+      const chips = [
+        makeChip(t("filter.all"), filterState.fsk == null, () => {
+          filterState.fsk = null;
+          renderFilterPopover(selector, rows, filterState, onChange);
+          onChange();
+        }),
+        ...fskValues.map((n) =>
+          makeChip(`FSK ${n}`, filterState.fsk === n, () => {
+            filterState.fsk = n;
+            renderFilterPopover(selector, rows, filterState, onChange);
+            onChange();
+          }, `chip--fsk fsk-badge--${n}`)
+        ),
+      ];
+      addSection("filter.section.fsk", chips);
+    }
+
+    // Clear all (only if any filter is active)
+    if (activeFilterCount(filterState) > 0) {
+      const reset = document.createElement("button");
+      reset.type = "button";
+      reset.className = "library__filter-reset";
+      reset.textContent = t("filter.reset");
+      reset.addEventListener("click", () => {
+        filterState.stream = null;
+        filterState.favoritesOnly = false;
+        filterState.fsk = null;
+        renderFilterPopover(selector, rows, filterState, onChange);
+        onChange();
+      });
+      host.appendChild(reset);
+    }
+
+    if (!host.children.length) {
+      const empty = document.createElement("div");
+      empty.className = "library__filter-empty";
+      empty.textContent = t("filter.none_available");
+      host.appendChild(empty);
+    }
+  }
+
+  function bindLibraryFilterButton() {
+    const btn = document.querySelector("#ss-library-filter-btn");
+    const popover = document.querySelector("#ss-library-filter-popover");
+    if (!btn || !popover || btn.dataset.bound === "1") return;
+    btn.dataset.bound = "1";
+
+    const close = () => {
+      popover.hidden = true;
+      btn.setAttribute("aria-expanded", "false");
+    };
+    const open = () => {
+      popover.hidden = false;
+      btn.setAttribute("aria-expanded", "true");
+    };
+
+    btn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      popover.hidden ? open() : close();
+    });
+    document.addEventListener("click", (ev) => {
+      if (popover.hidden) return;
+      if (popover.contains(ev.target) || btn.contains(ev.target)) return;
+      close();
+    });
+    document.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape" && !popover.hidden) close();
+    });
   }
 
   function seriesUrlFor(row) {
@@ -382,6 +552,25 @@
     if (season && episode) return `${base}/staffel-${season}/episode-${episode}`;
     if (season) return `${base}/staffel-${season}`;
     return base;
+  }
+
+  // Mirror of streamseeker.api.core.metadata.base.localize_block — when an
+  // external block carries translations[lang], overlay {title, overview,
+  // genres, tagline} from there; otherwise return the block unchanged so
+  // English (the primary fetch language) acts as the universal fallback.
+  function localizeExt(block, language) {
+    if (!block || typeof block !== "object") return block || {};
+    const tr = (block.translations || {})[language];
+    if (!tr) return block;
+    const merged = Object.assign({}, block);
+    for (const key of ["title", "overview", "genres", "tagline"]) {
+      const value = tr[key];
+      if (value != null && value !== "" &&
+          !(Array.isArray(value) && value.length === 0)) {
+        merged[key] = value;
+      }
+    }
+    return merged;
   }
 
   function statusLabel(status) {
@@ -536,6 +725,13 @@
     const poster = document.createElement("div");
     poster.className = "card__poster";
     poster.style.backgroundImage = `url("${api.posterUrl(row.key)}")`;
+    // Overlay the FSK age rating in the bottom-left corner of the poster
+    // so the listing stays compact and the meta column has more room.
+    const fskOverlay = renderFskBadge(row.fsk);
+    if (fskOverlay) {
+      fskOverlay.classList.add("fsk-badge--overlay");
+      poster.appendChild(fskOverlay);
+    }
     card.appendChild(poster);
 
     const body = document.createElement("div");
@@ -559,9 +755,6 @@
 
     const right = document.createElement("div");
     right.className = "card__actions";
-
-    const fskBadge = renderFskBadge(row.fsk);
-    if (fskBadge) right.appendChild(fskBadge);
 
     const progress = document.createElement("div");
     progress.className = "card__progress";
@@ -645,6 +838,10 @@
     // Merge all provider blocks so the modal shows every available field.
     // Preference order: earlier entries win per-field when multiple providers
     // carry the same data. Artwork always wins from the stored block.
+    // Each block is first overlaid with the active language's translation
+    // (translations.{de}) when present, falling back to the provider's
+    // top-level (English) fields.
+    const activeLang = (window.ssI18n && window.ssI18n.getLanguage && window.ssI18n.getLanguage()) || "en";
     const external = entry.external || {};
     const preference = ["tmdb", "tvdb", "anilist", "omdb", "tvmaze", "jikan"];
     const providersOrdered = [
@@ -653,7 +850,7 @@
     ];
     const ext = {};
     for (const name of providersOrdered) {
-      const block = external[name] || {};
+      const block = localizeExt(external[name] || {}, activeLang);
       for (const [k, v] of Object.entries(block)) {
         if (ext[k] == null && v != null) ext[k] = v;
       }
@@ -1004,6 +1201,44 @@
     langHint.className = "settings__hint";
     langHint.textContent = t("settings.language.hint");
     lang.appendChild(langHint);
+
+    // "Refresh metadata" — re-fetches every library entry's external
+    // metadata so the active language's translations get populated. Paced
+    // server-side; we just trigger and report.
+    const refreshRow = document.createElement("div");
+    refreshRow.className = "settings__refresh-row";
+    const refreshBtn = document.createElement("button");
+    refreshBtn.type = "button";
+    refreshBtn.className = "settings__refresh-btn";
+    refreshBtn.textContent = t("settings.metadata.refresh");
+    const refreshStatus = document.createElement("span");
+    refreshStatus.className = "settings__status";
+    refreshBtn.addEventListener("click", async () => {
+      refreshBtn.disabled = true;
+      refreshStatus.textContent = t("settings.metadata.refreshing");
+      refreshStatus.style.color = "";
+      try {
+        const result = await api.libraryRefreshAll();
+        const count = (result && result.queued) || 0;
+        refreshStatus.textContent = t("settings.metadata.refresh_queued", { count });
+        refreshStatus.style.color = "var(--success)";
+      } catch (err) {
+        refreshStatus.textContent = t("settings.action.error", {
+          message: err.message || "Error",
+        });
+        refreshStatus.style.color = "var(--danger)";
+      } finally {
+        refreshBtn.disabled = false;
+      }
+    });
+    refreshRow.appendChild(refreshBtn);
+    refreshRow.appendChild(refreshStatus);
+    lang.appendChild(refreshRow);
+
+    const refreshHint = document.createElement("p");
+    refreshHint.className = "settings__hint";
+    refreshHint.textContent = t("settings.metadata.hint");
+    lang.appendChild(refreshHint);
 
     wrap.appendChild(lang);
 

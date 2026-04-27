@@ -125,6 +125,57 @@ header .version {
   color: #fdba74;
 }
 
+.updates__toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 8px;
+}
+
+.updates__dismiss-all {
+  background: rgba(34, 197, 94, 0.16);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.updates__dismiss-all:hover { background: rgba(34, 197, 94, 0.28); }
+.updates__dismiss-all[disabled] { opacity: 0.5; cursor: not-allowed; }
+
+.updates__dismiss {
+  background: rgba(34, 197, 94, 0.16);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  border-radius: 6px;
+  padding: 4px 9px;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.updates__dismiss:hover { background: rgba(34, 197, 94, 0.28); }
+
+.settings__refresh-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.settings__refresh-btn {
+  background: rgba(99, 102, 241, 0.18);
+  color: #a5b4fc;
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.settings__refresh-btn:hover { background: rgba(99, 102, 241, 0.3); }
+.settings__refresh-btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+
 .tab-panel {
   padding: 10px 12px 14px;
 }
@@ -477,6 +528,111 @@ input[type="search"]:focus {
   border-color: var(--accent);
 }
 
+/* --- Library searchbar with filter button -------------------------- */
+.library__searchbar {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.library__searchbar input[type="search"] {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.library__filter-btn {
+  position: relative;
+  background: var(--bg-alt);
+  color: var(--muted);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 0 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.library__filter-btn:hover { color: var(--text); }
+.library__filter-btn[aria-expanded="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.library__filter-btn--active {
+  background: rgba(96, 165, 250, 0.18);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.library__filter-dot {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--accent);
+  color: #0b1220;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+}
+
+.library__filter-popover {
+  background: var(--bg-alt);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+/* Default `[hidden]` styling is overridden by our `display: flex` above —
+   restore it so the popover actually stays closed until toggled. */
+.library__filter-popover[hidden] { display: none; }
+
+.library__filter-section { display: flex; flex-direction: column; gap: 4px; }
+
+.library__filter-heading {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+}
+
+.library__filter-group { display: flex; flex-wrap: wrap; gap: 4px; }
+
+.library__filter-reset {
+  align-self: flex-end;
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.library__filter-reset:hover { color: var(--text); text-decoration: underline; }
+
+.library__filter-empty {
+  color: var(--muted);
+  font-size: 11px;
+  padding: 4px 0;
+}
+
+/* FSK chip in the popover takes the same color from .fsk-badge--N rules.
+   Reset the rounded-pill chip border & padding so the color carries. */
+.chip.chip--fsk {
+  border-radius: 4px;
+  padding: 2px 8px;
+  border-width: 1px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.chip.chip--fsk.chip--active { box-shadow: 0 0 0 2px var(--accent); }
+
 .cards {
   display: flex;
   flex-direction: column;
@@ -506,6 +662,7 @@ input[type="search"]:focus {
   background-size: cover;
   background-position: center;
   border-radius: 3px;
+  position: relative;
 }
 
 .card__body { min-width: 0; }
@@ -676,6 +833,21 @@ input[type="search"]:focus {
 .fsk-badge--12 { background: #22c55e; color: #ffffff; }
 .fsk-badge--16 { background: #3b82f6; color: #ffffff; }
 .fsk-badge--18 { background: #ef4444; color: #ffffff; }
+
+/* FSK badge overlaid on the poster's bottom-left corner. Square with
+   rounded corners; full opacity for legibility on busy covers. */
+.fsk-badge--overlay {
+  position: absolute;
+  left: 2px;
+  bottom: 2px;
+  width: 14px;
+  height: 14px;
+  font-size: 9px;
+  line-height: 12px;
+  border-radius: 3px;
+  border-width: 0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
 
 .detail__search-override {
   display: grid;

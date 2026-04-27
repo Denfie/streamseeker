@@ -23,8 +23,15 @@ class MetadataUnavailableError(RuntimeError):
 class MetadataMatch:
     """A normalized metadata record from one provider.
 
-    ``poster_url`` / ``backdrop_url`` / ``logo_url`` point at remote images;
-    downloading them to the local cache is the resolver's job.
+    Top-level text fields (``title``, ``overview``, ``genres``) hold the
+    *primary* (fallback) language — by convention English. Translated
+    text per language code lives under ``translations``::
+
+        translations = {"de": {"title": "...", "overview": "...", "genres": [...]}}
+
+    Consumers that know the active UI language pick from ``translations``
+    first and fall back to the top-level fields when a translation is
+    missing or empty. Cover URLs are language-agnostic and stay top-level.
     """
 
     provider: str                       # e.g. "tmdb", "anilist"
@@ -39,6 +46,7 @@ class MetadataMatch:
     backdrop_url: str | None = None
     logo_url: str | None = None
     source_url: str | None = None       # canonical URL on the provider's site
+    translations: dict[str, dict] = field(default_factory=dict)
     extra: dict = field(default_factory=dict)
 
     def to_external_block(self, *, poster_file: str | None = None,
@@ -67,9 +75,35 @@ class MetadataMatch:
             block["logo"] = logo_file
         if fetched_at is not None:
             block["fetched_at"] = fetched_at
+        if self.translations:
+            block["translations"] = {
+                lang: {k: v for k, v in tr.items() if v not in (None, "", [], {})}
+                for lang, tr in self.translations.items()
+            }
         if self.extra:
             block["extra"] = dict(self.extra)
         return block
+
+
+def localize_block(block: dict, language: str | None) -> dict:
+    """Return a copy of an ``external.<provider>`` dict with text fields
+    overlaid from ``translations[language]`` when present.
+
+    Falls back to the top-level (English) fields when the language is
+    missing or a particular field has no translated value. Cover URLs and
+    other non-text data are passed through untouched.
+    """
+    if not isinstance(block, dict):
+        return block
+    out = dict(block)
+    translations = block.get("translations") or {}
+    tr = translations.get(language) if language else None
+    if isinstance(tr, dict):
+        for key in ("title", "overview", "genres", "tagline"):
+            value = tr.get(key)
+            if value not in (None, "", [], {}):
+                out[key] = value
+    return out
 
 
 class MetadataProvider(ABC):

@@ -184,6 +184,27 @@ def dismiss_updates(store: LibraryStore, kind: str, key: str) -> bool:
     return True
 
 
+def dismiss_all_updates(store: LibraryStore, kind: str = KIND_LIBRARY) -> int:
+    """Clear ``pending_updates`` on every entry that has any. Returns the count cleared.
+
+    The library index only stores summary fields, so we have to read each
+    entry's full record to check whether it actually has pending updates.
+    """
+    cleared = 0
+    for indexed in store.list(kind):
+        key = indexed.get("key")
+        if not key:
+            continue
+        entry = store.get(kind, key)
+        if entry is None or not entry.get("pending_updates"):
+            continue
+        patched = dict(entry)
+        patched["pending_updates"] = []
+        store.add(kind, patched)
+        cleared += 1
+    return cleared
+
+
 # ---------------------------------------------------------------------
 # Scheduler
 # ---------------------------------------------------------------------

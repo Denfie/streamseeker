@@ -11,6 +11,63 @@ The browser extension is released independently; see `extension/CHANGELOG.md`.
 ## [Unreleased]
 
 ### Added
+- **TMDb-Metadaten zweisprachig.** Der TMDb-Provider holt nun für jede
+  Serie/Film zwei Sprachen: `en-US` als Top-Level (Universal-Fallback)
+  und `de-DE` als Translation unter `external.tmdb.translations.de`.
+  Cover-URLs sind sprachneutral und werden weiterhin nur einmal gecacht.
+  AniList bietet keine offizielle Übersetzungs-API → bleibt bei der
+  Original-Description (meist Englisch).
+- **`localize_block(block, language)`** in
+  `streamseeker.api.core.metadata.base` — Helper, der `title`,
+  `overview`, `genres`, `tagline` aus `translations[lang]` überlagert
+  und auf Top-Level zurückfällt. Spiegel-Implementierung in
+  `extension/popup/popup.js` für die Detail-Ansicht.
+- **`POST /library/refresh-all`** — paced Bulk-Refresh über alle
+  Library-Einträge. Query-Params `reset` (default `true`) und `delay`
+  in Sekunden (default `1.5`). Läuft im Hintergrund-Thread, gibt sofort
+  `{"queued": N, "delay_seconds": X}` zurück. Vom Extension-Popup
+  über den neuen "Metadaten neu laden"-Button im Settings-Tab
+  ausgelöst.
+- **`POST /updates/dismiss-all`** — räumt sämtliche `pending_updates`
+  über die ganze Library in einem Aufruf ab. Genutzt vom neuen
+  "Alle als gelesen markieren"-Button im Extension-Popup. Idempotent
+  (gibt `{"dismissed": 0}` zurück, wenn nichts ansteht).
+- **Browser-Extension auto-sync beim Daemon-Start.** Wenn die im CLI-Paket
+  gebundelte Extension-Version neuer ist als die installierte unter
+  `~/.streamseeker/extension/`, ersetzt der Daemon den Disk-Copy
+  automatisch (atomar via Temp-Dir + Rename, mit `.bak`-Sicherung). Der
+  Background-Worker der Extension pollt `GET /extension/version` und
+  reloadet sich selbst bei Versionssprung — End-User müssen also nichts
+  mehr manuell tun. Symlinks bleiben unangetastet, damit der Dev-Modus
+  via `install-extension --link` weiterläuft.
+- **`install-extension --link`** für Entwickler: erzeugt einen Symlink
+  von `~/.streamseeker/extension/` zur Quelle im Repo. File-Edits sind
+  damit ohne erneutes Copy live; ein Klick auf "Reload" in
+  `chrome://extensions/` reicht.
+- **Neue Daemon-Endpoints:** `GET /extension/version` (genutzt vom
+  Background-Worker für Self-Reload). `GET /version` enthält jetzt
+  zusätzlich `extension`-Feld.
+
+### Fixed
+- **`/events` (SSE) schickt alle 20s eine Keepalive-Kommentarzeile.**
+  Verhindert, dass der MV3-Service-Worker der Browser-Extension bei
+  ruhiger Queue nach 30s ohne Netzwerk-Traffic eingefroren wird —
+  vorher konnte das dazu führen, dass spät geöffnete Tabs keine
+  Live-Updates mehr bekamen.
+
+### Added
+- **Daemon-Watchdog gegen Hänger.** Neuer Thread im Daemon pingt
+  alle 30s den eigenen `GET /health`-Endpoint. Nach 3 aufeinander
+  folgenden Fehlern (Timeout, Connection refused, 5xx) ruft der
+  Watchdog `os._exit(1)` auf — launchd (`KeepAlive=true`) bzw.
+  systemd (`Restart=always`) starten den Daemon dann automatisch
+  neu. Behebt das Symptom, dass ein deadlocked Daemon "lebt", aber
+  keine Requests mehr beantwortet. Neue Konfiguration in den
+  Autostart-Templates: launchd `ThrottleInterval=15`/`ExitTimeOut=30`,
+  systemd `StartLimitBurst=5`/`StartLimitIntervalSec=60` damit ein
+  echter Crash-Loop nicht eskaliert. Wer Autostart bereits installiert
+  hat, muss einmal `streamseeker daemon install-autostart` neu
+  ausführen, damit die neuen Throttle-Limits aktiv werden.
 - **i18n: Deutsch + English umschaltbar.** Neues Modul
   `streamseeker.i18n` mit JSON-basierten Locale-Bundles unter
   `src/streamseeker/locales/{de,en}.json`. Aktive Sprache wird beim

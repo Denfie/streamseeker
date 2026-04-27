@@ -185,6 +185,96 @@ def test_details_returns_none_on_404(provider: TmdbProvider) -> None:
     assert provider.details(999999, kind="tv") is None
 
 
+# --- translations -------------------------------------------------
+
+
+@responses.activate
+def test_details_fetches_german_translation(provider: TmdbProvider) -> None:
+    responses.add(
+        responses.GET, f"{API_BASE}/tv/42",
+        json={
+            "id": 42,
+            "name": "Breaking Bad",
+            "overview": "A chemistry teacher …",
+            "first_air_date": "2008-01-20",
+            "genres": [{"id": 18, "name": "Drama"}],
+            "vote_average": 8.9,
+            "content_ratings": {"results": []},
+        },
+    )
+    responses.add(
+        responses.GET, f"{API_BASE}/tv/42",  # de-DE call (matched by query string)
+        json={
+            "id": 42,
+            "name": "Breaking Bad",
+            "overview": "Ein Chemielehrer …",
+            "genres": [{"id": 18, "name": "Drama"}, {"id": 80, "name": "Krimi"}],
+            "tagline": "Alle Veränderung beginnt mit Chemie.",
+        },
+    )
+
+    match = provider.details(42, kind="tv")
+    assert match is not None
+    # English / primary
+    assert match.overview == "A chemistry teacher …"
+    assert "Drama" in match.genres
+    # German overlay
+    assert match.translations["de"]["overview"] == "Ein Chemielehrer …"
+    assert match.translations["de"]["genres"] == ["Drama", "Krimi"]
+    assert match.translations["de"]["tagline"].startswith("Alle Veränderung")
+
+
+@responses.activate
+def test_details_swallows_translation_failure(provider: TmdbProvider) -> None:
+    responses.add(
+        responses.GET, f"{API_BASE}/tv/7",
+        json={
+            "id": 7, "name": "X", "overview": "primary",
+            "first_air_date": "2020-01-01", "genres": [],
+            "content_ratings": {"results": []},
+        },
+    )
+    # Second call raises a connection error; translation is missing but
+    # the primary match must still be returned intact.
+    import requests as _requests
+    responses.add(
+        responses.GET, f"{API_BASE}/tv/7",
+        body=_requests.exceptions.ConnectTimeout("upstream timed out"),
+    )
+
+    match = provider.details(7, kind="tv")
+    assert match is not None
+    assert match.overview == "primary"
+    assert "de" not in (match.translations or {})
+
+
+# --- localize_block helper ----------------------------------------
+
+
+def test_localize_block_overlays_active_language() -> None:
+    from streamseeker.api.core.metadata.base import localize_block
+
+    block = {
+        "id": 1, "title": "X",
+        "overview": "english", "genres": ["A"],
+        "translations": {"de": {"overview": "deutsch", "genres": ["B"]}},
+    }
+    de = localize_block(block, "de")
+    assert de["overview"] == "deutsch"
+    assert de["genres"] == ["B"]
+    en = localize_block(block, "en")
+    assert en["overview"] == "english"
+    assert en["genres"] == ["A"]
+
+
+def test_localize_block_falls_back_when_translation_missing() -> None:
+    from streamseeker.api.core.metadata.base import localize_block
+
+    block = {"id": 1, "overview": "english"}
+    assert localize_block(block, "de")["overview"] == "english"
+    assert localize_block(block, None)["overview"] == "english"
+
+
 # --- MetadataMatch.to_external_block -------------------------------
 
 

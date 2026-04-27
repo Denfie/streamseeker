@@ -2,6 +2,8 @@
 (function () {
   const bundle = {
     "header.tab.updates": "New",
+    "updates.dismiss": "Mark read",
+    "updates.dismiss_all": "Mark all as read",
     "header.tab.status": "Status",
     "header.tab.library": "Collection",
     "header.tab.settings": "Settings",
@@ -11,6 +13,12 @@
     "search.placeholder": "Search…",
     "filter.all": "All",
     "filter.favorites": "⭐ Favorites",
+    "filter.button": "Filters",
+    "filter.reset": "Reset filters",
+    "filter.none_available": "No filters available.",
+    "filter.section.favorites": "Favorites",
+    "filter.section.stream": "Provider",
+    "filter.section.fsk": "Age rating",
 
     "empty.collection": "Collection is empty.",
     "empty.collection_load_failed": "Could not load the collection.",
@@ -68,6 +76,10 @@
     "settings.language.de": "Deutsch",
     "settings.language.en": "English",
     "settings.language.hint": "Effective immediately in the browser extension. CLI/daemon switch language after `streamseeker daemon restart`.",
+    "settings.metadata.refresh": "Refresh metadata",
+    "settings.metadata.refreshing": "Working …",
+    "settings.metadata.refresh_queued": "{count} entries are being refreshed in the background.",
+    "settings.metadata.hint": "Re-fetches description, genres and cover for every library entry — e.g. after a language switch. Paced (~1.5s per entry) so TMDb/AniList don't rate-limit us.",
     "settings.action.save": "Save",
     "settings.action.saving": "Saving…",
     "settings.action.saved": "Saved ✓",

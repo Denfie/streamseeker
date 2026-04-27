@@ -80,7 +80,8 @@ def test_systemd_render_has_required_sections() -> None:
     assert "[Install]" in unit
     assert "Type=simple" in unit
     assert "--foreground" in unit
-    assert "Restart=on-failure" in unit
+    assert "Restart=always" in unit
+    assert "StartLimitBurst=" in unit
     assert "WantedBy=default.target" in unit
 
 

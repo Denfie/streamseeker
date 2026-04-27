@@ -269,6 +269,29 @@ def create_app() -> FastAPI:
         logger.info(f"language activated: {active}")
 
     @app.on_event("startup")
+    def _sync_browser_extension_on_startup() -> None:
+        # Keep ~/.streamseeker/extension/ in step with the bundled source so
+        # CLI upgrades pull the new extension without manual install steps.
+        # The browser extension picks up the change via /extension/version
+        # and reloads itself.
+        from streamseeker.distribution import sync_extension
+        try:
+            result = sync_extension()
+            if result.action == "updated":
+                logger.info(
+                    f"extension updated on disk: "
+                    f"{result.installed_version} → {result.bundled_version}"
+                )
+            elif result.action == "installed":
+                logger.info(
+                    f"extension installed on disk (version {result.bundled_version})"
+                )
+            elif result.action == "skipped_symlink":
+                logger.info("extension target is a dev symlink — skipping auto-sync")
+        except Exception as exc:  # noqa: BLE001 — startup must not fail because of this
+            logger.warning(f"extension auto-sync failed: {exc}")
+
+    @app.on_event("startup")
     def _verify_library_index_on_startup() -> None:
         """Runs before anything else touches the library.
 
@@ -339,13 +362,49 @@ def create_app() -> FastAPI:
             except Exception:  # noqa: BLE001
                 pass
 
+    @app.on_event("startup")
+    def _start_watchdog() -> None:
+        from streamseeker.daemon.watchdog import Watchdog
+        from streamseeker.daemon.lifecycle import DAEMON_HOST, DAEMON_PORT
+        try:
+            app.state.watchdog = Watchdog(host=DAEMON_HOST, port=DAEMON_PORT)
+            app.state.watchdog.start()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"watchdog failed to start: {exc}")
+
+    @app.on_event("shutdown")
+    def _stop_watchdog() -> None:
+        wd = getattr(app.state, "watchdog", None)
+        if wd:
+            try:
+                wd.stop()
+            except Exception:  # noqa: BLE001
+                pass
+
     # -----------------------------------------------------------------
     # Meta
     # -----------------------------------------------------------------
 
     @app.get("/version")
     def version() -> dict:
-        return {"cli": get_version()}
+        from streamseeker.distribution import installed_extension_version
+        return {
+            "cli": get_version(),
+            "extension": installed_extension_version(),
+        }
+
+    @app.get("/extension/version")
+    def extension_version() -> dict:
+        # Used by the extension's background worker to detect when an
+        # auto-synced newer copy is on disk and trigger chrome.runtime.reload().
+        from streamseeker.distribution import installed_extension_version
+        return {"version": installed_extension_version()}
+
+    @app.get("/health")
+    def health() -> dict:
+        # Intentionally minimal: no locks, no disk reads. Used by the
+        # in-process watchdog to detect event-loop hangs.
+        return {"ok": True, "ts": time.time()}
 
     @app.get("/status")
     def status() -> dict:
@@ -605,6 +664,12 @@ def create_app() -> FastAPI:
         from streamseeker.api.core.library.updates import collect_pending
         return collect_pending(LibraryStore())
 
+    @app.post("/updates/dismiss-all")
+    def updates_dismiss_all() -> dict:
+        from streamseeker.api.core.library.updates import dismiss_all_updates
+        cleared = dismiss_all_updates(LibraryStore(), KIND_LIBRARY)
+        return {"dismissed": cleared}
+
     @app.post("/updates/{key:path}/dismiss")
     def updates_dismiss(key: str) -> dict:
         from streamseeker.api.core.library.updates import dismiss_updates
@@ -641,7 +706,15 @@ def create_app() -> FastAPI:
 
     @app.get("/library")
     def library_list() -> list[dict]:
-        return LibraryStore().list(KIND_LIBRARY)
+        # Sort across all providers so the user sees one cohesive,
+        # alphabetically-ordered list — by default the on-disk index is
+        # grouped by stream-dir (aniworldto, megakinotax, sto), which made
+        # later providers always appear at the bottom regardless of title.
+        rows = LibraryStore().list(KIND_LIBRARY)
+        return sorted(
+            rows,
+            key=lambda r: (r.get("title") or r.get("slug") or "").casefold(),
+        )
 
     @app.get("/library/state")
     def library_state(stream: str, slug: str) -> dict:
@@ -735,6 +808,38 @@ def create_app() -> FastAPI:
 
         _invalidate_library_state_cache(req.stream, req.slug)
         return {"marked": marked, "key": key}
+
+    @app.post("/library/refresh-all")
+    def library_refresh_all(reset: bool = True, delay: float = 1.5) -> dict:
+        """Re-run metadata enrichment for every library entry, paced.
+
+        Used when the user changes UI language and wants the on-disk
+        metadata cache repopulated with translations. Runs in a background
+        thread with ``delay`` seconds between entries so external APIs
+        (TMDb 50 req/s, AniList 30 req/min) are never hit hard. Returns
+        immediately with the number of entries queued.
+        """
+        store = LibraryStore()
+        keys = [row.get("key") for row in store.list(KIND_LIBRARY) if row.get("key")]
+        delay_seconds = max(0.0, float(delay))
+
+        def _worker() -> None:
+            resolver = MetadataResolver()
+            success = 0
+            for index, k in enumerate(keys):
+                try:
+                    if resolver.enrich(k, reset=reset):
+                        success += 1
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(f"refresh-all: enrich failed for {k}: {exc}")
+                if delay_seconds and index < len(keys) - 1:
+                    time.sleep(delay_seconds)
+            logger.info(
+                f"refresh-all completed: {success}/{len(keys)} entries enriched"
+            )
+
+        threading.Thread(target=_worker, name="ss-refresh-all", daemon=True).start()
+        return {"queued": len(keys), "delay_seconds": delay_seconds}
 
     @app.post("/library/{key:path}/refresh")
     def library_refresh(
@@ -900,6 +1005,11 @@ def create_app() -> FastAPI:
             # Poll every 500ms; only emit when summary or progress changed.
             # The timestamp is deliberately excluded from the dedup key so
             # we don't spam the client with pseudo-changes every tick.
+            ticks_since_keepalive = 0
+            # Send an SSE comment line every ~20s so MV3 service workers
+            # (which time out after 30s of no network activity) stay alive
+            # while the queue is idle. Browsers ignore SSE comment lines.
+            keepalive_every = 40  # 40 * 0.5s = 20s
             while True:
                 if await request.is_disconnected():
                     break
@@ -911,6 +1021,12 @@ def create_app() -> FastAPI:
                 if signature != last_signature:
                     yield f"event: status\ndata: {json.dumps(status)}\n\n"
                     last_signature = signature
+                    ticks_since_keepalive = 0
+                else:
+                    ticks_since_keepalive += 1
+                    if ticks_since_keepalive >= keepalive_every:
+                        yield ": keepalive\n\n"
+                        ticks_since_keepalive = 0
                 await asyncio.sleep(0.5)
 
         return StreamingResponse(stream(), media_type="text/event-stream")

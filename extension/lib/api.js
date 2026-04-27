@@ -78,6 +78,8 @@
 
     updatesList: () => request("GET", "/updates"),
     updatesDismiss: (key) => request("POST", `/updates/${encodeURIComponent(key)}/dismiss`),
+    updatesDismissAll: () => request("POST", `/updates/dismiss-all`),
+    libraryRefreshAll: () => request("POST", `/library/refresh-all?reset=true`),
 
     favoritesList: () => request("GET", "/favorites"),
     favoritesAdd: (stream, slug) => request("POST", "/favorites", { stream, slug }),
@@ -87,8 +89,40 @@
     posterUrl: (key) => `${BASE}/library/${encodeURIComponent(key)}/poster`,
     backdropUrl: (key) => `${BASE}/library/${encodeURIComponent(key)}/backdrop`,
 
-    // Server-Sent Events — returns an AbortController caller can .abort().
+    // Server-Sent Events — caller can call .close() / .disconnect() on the
+    // returned object. In content-script context we go through the background
+    // service worker so all tabs share a single SSE connection (Chrome limits
+    // ~6 HTTP/1.1 connections per origin, which broke later tabs). Popup uses
+    // EventSource directly because it's short-lived and only one instance.
     subscribeStatus(onStatus, onError) {
+      const inContentScript =
+        typeof chrome !== "undefined" &&
+        chrome.runtime &&
+        typeof chrome.runtime.connect === "function" &&
+        // Popup has chrome.runtime too — distinguish by absence of EventSource
+        // is unreliable; instead, prefer the port path whenever runtime.connect
+        // is available AND we're not inside the extension's own pages.
+        location.protocol !== "chrome-extension:";
+
+      if (inContentScript) {
+        const port = chrome.runtime.connect({ name: "ss:events" });
+        port.onMessage.addListener((msg) => {
+          if (!msg || msg.type !== "ss:event") return;
+          if (msg.event !== "status") return;
+          try {
+            onStatus(msg.data);
+          } catch (err) {
+            if (onError) onError(err);
+          }
+        });
+        port.onDisconnect.addListener(() => {
+          if (onError) onError(new Error("background port disconnected"));
+        });
+        return {
+          close: () => { try { port.disconnect(); } catch (_) {} },
+        };
+      }
+
       const source = new EventSource(BASE + "/events");
       source.addEventListener("status", (ev) => {
         try {

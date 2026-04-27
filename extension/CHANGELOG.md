@@ -7,6 +7,93 @@ required CLI version via the `minCliVersion` key in `manifest.json`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.0] — 2026-04-27
+
+### Added
+- **Filter-Button neben dem Suchfeld in der Sammlung.** Öffnet ein
+  Popover mit drei Filter-Sektionen: Favoriten (nur ⭐), Anbieter
+  (aniworld/sto/megakino — nur sichtbar wenn ≥2 vorhanden), FSK
+  (nur Werte, die in deiner Sammlung tatsächlich vorkommen). Aktive
+  Filter werden auf dem Button als kleiner Zähler-Dot angezeigt; ein
+  "Filter zurücksetzen"-Link räumt alles ab. Ohne Filter wird die
+  komplette Sammlung in einer Liste gezeigt — Sortierung unverändert.
+- **i18n-Keys** `filter.button`, `filter.reset`, `filter.section.*`,
+  `filter.none_available` in DE + EN.
+
+### Changed
+- Die alte Chip-Leiste oberhalb des Suchfelds (Favoriten / Anbieter)
+  wandert in das neue Popover und nimmt damit weniger vertikalen
+  Platz weg.
+
+## [0.18.2] — 2026-04-27
+
+### Changed
+- FSK-Overlay auf dem Poster ohne Opacity — Lesbarkeit hatte mit
+  durchscheinendem Cover gelitten. Drop-Shadow bleibt für leichte
+  Trennung vom Bild.
+
+## [0.18.1] — 2026-04-27
+
+### Changed
+- **FSK-Badge wandert auf das Poster.** In der Sammlung-Liste wird die
+  Altersfreigabe nun unten links als kleines abgerundetes Quadrat (14×14,
+  Opacity 0.78, leichter Drop-Shadow für Lesbarkeit auf hellen Covern)
+  über dem Poster eingeblendet — vorher als Kreis in der rechten
+  Action-Spalte. Spart Platz, hält die Farb-Codierung (weiß/gelb/grün/
+  blau/rot) erkennbar.
+
+## [0.18.0] — 2026-04-27
+
+### Added
+- **Lokalisierte Metadaten in der Detail-Ansicht.** Wenn der CLI-Daemon
+  unter `external.tmdb.translations.de` eine deutsche Beschreibung +
+  Genres + Tagline hat, überlagert das Popup beim Render mit der
+  aktiven Sprache; Englisch ist Universal-Fallback. Sprachwechsel im
+  Settings-Tab wirkt damit auch in den Detail-Karten.
+- **"Metadaten neu laden"-Button** im Settings-Tab unter dem Sprach-
+  Toggle. Triggert `POST /library/refresh-all` und meldet, wie viele
+  Einträge im Hintergrund refresht werden. Läuft serverseitig paced
+  (≈1.5s pro Eintrag), damit TMDb/AniList nicht ratelimiten.
+
+## [0.17.1] — 2026-04-27
+
+### Added
+- **"Alle als gelesen markieren"** im Neu-Tab: Toolbar-Button rechts
+  oberhalb der Karten-Liste. Räumt sämtliche pending Updates serverseitig
+  in einem Aufruf ab (`POST /updates/dismiss-all`).
+- **Per-Karte sichtbarer "Als gelesen"-Button** statt unauffälligem
+  ✓-Symbol. Beschriftung lokalisiert in DE/EN.
+
+## [0.17.0] — 2026-04-27
+
+### Added
+- **Self-Reload bei neuer Disk-Version.** Der Background-Service-Worker
+  pollt `GET /extension/version` beim Start und alle 5 Minuten. Liegt
+  auf `~/.streamseeker/extension/` eine neuere Version als die laufende,
+  ruft er `chrome.runtime.reload()` — Chrome liest den entpackten
+  Ordner neu ein und die Extension steht ohne User-Action auf der neuen
+  Version. Der Daemon synct seinerseits beim Start automatisch die
+  gebundelte Quelle auf die Disk (siehe CLI-Changelog), sodass eine
+  CLI-Aktualisierung die Extension automatisch mitzieht.
+- **Permission `alarms`** im Manifest für die periodische Update-Prüfung
+  (5-Minuten-Intervall, ohne Service-Worker dauerhaft am Leben zu halten).
+
+## [0.16.1] — 2026-04-27
+
+### Fixed
+- **Mehrere Tabs zeigten keine StreamSeeker-Footer/Badges mehr.**
+  Jeder Tab hat bisher eine eigene `EventSource`-Verbindung zum Daemon
+  geöffnet. Chrome erlaubt nur ~6 HTTP/1.1-Verbindungen pro Origin —
+  ab dem 7. Tab steckte der Tab in der Connection-Queue fest, der
+  initiale `libraryState`-Fetch konnte nicht durchgehen, und es kam
+  weder Footer noch Badges. Jetzt öffnet der Background-Service-Worker
+  *eine* zentrale SSE-Verbindung und broadcastet Events per
+  `chrome.runtime`-Port an alle Content-Scripts. Der Popup nutzt
+  weiterhin direkt `EventSource` (nur eine Instanz, kein Connection-Druck).
+- **Daemon `/events` schickt jetzt SSE-Keepalive-Kommentare alle 20s.**
+  Verhindert, dass der MV3-Service-Worker bei stiller Queue nach 30s
+  ohne Netzwerk-Traffic eingefroren wird.
+
 ## [0.16.0] — 2026-04-25
 
 ### Added

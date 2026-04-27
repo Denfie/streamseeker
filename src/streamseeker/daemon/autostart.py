@@ -97,6 +97,12 @@ class LaunchdAdapter(AutostartAdapter):
             "    </array>\n"
             "    <key>RunAtLoad</key>\n    <true/>\n"
             "    <key>KeepAlive</key>\n    <true/>\n"
+            # Wait at least 15s between restarts so a crash-loop on a broken
+            # config can't burn CPU. KeepAlive still triggers the restart.
+            "    <key>ThrottleInterval</key>\n    <integer>15</integer>\n"
+            # Allow up to 30s for graceful shutdown before SIGKILL.
+            "    <key>ExitTimeOut</key>\n    <integer>30</integer>\n"
+            "    <key>ProcessType</key>\n    <string>Background</string>\n"
             f"    <key>StandardOutPath</key>\n    <string>{stdout}</string>\n"
             f"    <key>StandardErrorPath</key>\n    <string>{stderr}</string>\n"
             f"{env_entries}"
@@ -148,12 +154,18 @@ class SystemdUserAdapter(AutostartAdapter):
             "[Unit]\n"
             "Description=StreamSeeker background daemon\n"
             "After=network-online.target\n"
+            # Cap restart loops: max 5 restarts in 60s before systemd gives up.
+            "StartLimitIntervalSec=60\n"
+            "StartLimitBurst=5\n"
             "\n"
             "[Service]\n"
             "Type=simple\n"
             f"ExecStart={python} -m streamseeker daemon start --foreground\n"
-            "Restart=on-failure\n"
-            "RestartSec=3\n"
+            # `always` (not just on-failure) so even a graceful but unintended
+            # exit triggers a restart. The watchdog uses os._exit(1) which is
+            # caught by both modes.
+            "Restart=always\n"
+            "RestartSec=5\n"
             f"{env_line}"
             "\n"
             "[Install]\n"

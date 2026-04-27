@@ -95,6 +95,29 @@ def test_daemon_refresh_404_for_unknown_entry() -> None:
     assert response.status_code == 404
 
 
+def test_daemon_refresh_all_kicks_off_paced_worker() -> None:
+    LibraryStore().mark_episode_downloaded("sto::breaking-bad", 1, 1)
+    LibraryStore().mark_episode_downloaded("sto::other-show", 1, 1)
+    client = TestClient(create_app())
+    with patch.object(MetadataResolver, "enrich", return_value=True) as enrich:
+        # delay=0 so the worker doesn't actually sleep during the test
+        response = client.post("/library/refresh-all?reset=true&delay=0")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["queued"] == 2
+        assert body["delay_seconds"] == 0.0
+        # Wait briefly for the daemon thread to consume the keys.
+        import time
+        for _ in range(50):
+            if enrich.call_count >= 2:
+                break
+            time.sleep(0.01)
+        assert enrich.call_count == 2
+        # `reset=true` must propagate through to the resolver.
+        for call in enrich.call_args_list:
+            assert call.kwargs.get("reset") is True
+
+
 def test_daemon_poster_endpoint_serves_file() -> None:
     LibraryStore().mark_episode_downloaded("sto::breaking-bad", 1, 1)
     asset = paths.series_dir(KIND_LIBRARY, "sto", "breaking-bad")

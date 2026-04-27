@@ -3,6 +3,8 @@
 (function () {
   const bundle = {
     "header.tab.updates": "Neu",
+    "updates.dismiss": "Als gelesen",
+    "updates.dismiss_all": "Alle als gelesen markieren",
     "header.tab.status": "Status",
     "header.tab.library": "Sammlung",
     "header.tab.settings": "Einstellungen",
@@ -12,6 +14,12 @@
     "search.placeholder": "Suche…",
     "filter.all": "Alle",
     "filter.favorites": "⭐ Favoriten",
+    "filter.button": "Filter",
+    "filter.reset": "Filter zurücksetzen",
+    "filter.none_available": "Keine Filter verfügbar.",
+    "filter.section.favorites": "Favoriten",
+    "filter.section.stream": "Anbieter",
+    "filter.section.fsk": "FSK",
 
     "empty.collection": "Sammlung ist leer.",
     "empty.collection_load_failed": "Konnte Sammlung nicht laden.",
@@ -69,6 +77,10 @@
     "settings.language.de": "Deutsch",
     "settings.language.en": "English",
     "settings.language.hint": "Wirkt in Browser-Extension sofort. CLI/Daemon übernehmen die Sprache nach `streamseeker daemon restart`.",
+    "settings.metadata.refresh": "Metadaten neu laden",
+    "settings.metadata.refreshing": "Läuft …",
+    "settings.metadata.refresh_queued": "{count} Einträge werden im Hintergrund aktualisiert.",
+    "settings.metadata.hint": "Lädt für jeden Library-Eintrag Beschreibung, Genres und Cover neu — z. B. nach Sprachwechsel. Läuft langsam (≈1.5s pro Eintrag), damit TMDb/AniList nicht ratelimiten.",
     "settings.action.save": "Speichern",
     "settings.action.saving": "Speichere…",
     "settings.action.saved": "Gespeichert ✓",

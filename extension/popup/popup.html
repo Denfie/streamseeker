@@ -25,6 +25,10 @@
   </nav>
 
   <section id="tab-updates" class="tab-panel" role="tabpanel" aria-labelledby="updates" hidden>
+    <div class="updates__toolbar" id="ss-updates-toolbar" hidden>
+      <button type="button" id="ss-updates-dismiss-all" class="updates__dismiss-all"
+              data-i18n="updates.dismiss_all">Alle als gelesen markieren</button>
+    </div>
     <div class="cards" id="ss-updates"></div>
   </section>
 
@@ -34,8 +38,18 @@
   </section>
 
   <section id="tab-library" class="tab-panel" role="tabpanel" aria-labelledby="library" hidden>
-    <div class="filter-chips" id="ss-library-filter"></div>
-    <input type="search" id="ss-library-search" placeholder="Suche…" data-i18n-placeholder="search.placeholder" />
+    <div class="library__searchbar">
+      <input type="search" id="ss-library-search" placeholder="Suche…" data-i18n-placeholder="search.placeholder" />
+      <button type="button" id="ss-library-filter-btn" class="library__filter-btn"
+              aria-haspopup="true" aria-expanded="false"
+              data-i18n-title="filter.button" title="Filter">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+          <path d="M3 5h18l-7 9v6l-4-2v-4z" fill="currentColor"/>
+        </svg>
+        <span class="library__filter-dot" hidden></span>
+      </button>
+    </div>
+    <div class="library__filter-popover" id="ss-library-filter-popover" hidden role="dialog"></div>
     <div class="cards" id="ss-library"></div>
   </section>
 

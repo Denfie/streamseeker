@@ -170,6 +170,36 @@ def test_dismiss_updates_returns_false_for_unknown_key() -> None:
     assert dismiss_updates(store, KIND_LIBRARY, "aniworldto::ghost") is False
 
 
+def test_dismiss_all_updates_clears_every_entry() -> None:
+    from streamseeker.api.core.library.updates import dismiss_all_updates
+
+    store = LibraryStore()
+    store.add(KIND_LIBRARY, {
+        "stream": "aniworldto", "slug": "a",
+        "pending_updates": [{"type": "new_season", "season": 2}],
+    })
+    store.add(KIND_LIBRARY, {
+        "stream": "sto", "slug": "b",
+        "pending_updates": [{"type": "new_episode", "season": 1, "from": 3, "to": 4}],
+    })
+    store.add(KIND_LIBRARY, {
+        "stream": "sto", "slug": "c",  # no pending_updates → must not be touched
+    })
+
+    cleared = dismiss_all_updates(store, KIND_LIBRARY)
+    assert cleared == 2
+    assert store.get(KIND_LIBRARY, "aniworldto::a")["pending_updates"] == []
+    assert store.get(KIND_LIBRARY, "sto::b")["pending_updates"] == []
+
+
+def test_dismiss_all_updates_idempotent_on_empty_state() -> None:
+    from streamseeker.api.core.library.updates import dismiss_all_updates
+
+    store = LibraryStore()
+    store.add(KIND_LIBRARY, {"stream": "aniworldto", "slug": "x"})
+    assert dismiss_all_updates(store, KIND_LIBRARY) == 0
+
+
 def test_collect_pending_reports_favorite_flag() -> None:
     store = LibraryStore()
     store.add(KIND_LIBRARY, {
@@ -231,3 +261,27 @@ def test_dismiss_endpoint_clears_pending(client: TestClient) -> None:
 
 def test_dismiss_unknown_key_returns_404(client: TestClient) -> None:
     assert client.post("/updates/aniworldto::ghost/dismiss").status_code == 404
+
+
+def test_dismiss_all_endpoint_clears_every_pending(client: TestClient) -> None:
+    LibraryStore().add(KIND_LIBRARY, {
+        "stream": "aniworldto", "slug": "a",
+        "pending_updates": [{"type": "new_season", "season": 2}],
+    })
+    LibraryStore().add(KIND_LIBRARY, {
+        "stream": "sto", "slug": "b",
+        "pending_updates": [{"type": "new_episode", "season": 1, "from": 3, "to": 4}],
+    })
+    assert len(client.get("/updates").json()) == 2
+
+    response = client.post("/updates/dismiss-all")
+    assert response.status_code == 200
+    assert response.json() == {"dismissed": 2}
+    assert client.get("/updates").json() == []
+
+
+def test_dismiss_all_endpoint_idempotent_when_nothing_pending(client: TestClient) -> None:
+    LibraryStore().add(KIND_LIBRARY, {"stream": "aniworldto", "slug": "x"})
+    response = client.post("/updates/dismiss-all")
+    assert response.status_code == 200
+    assert response.json() == {"dismissed": 0}

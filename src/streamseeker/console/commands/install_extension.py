@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -9,7 +8,11 @@ from cleo.commands.command import Command
 from cleo.helpers import option
 
 from streamseeker import paths
-from streamseeker.distribution import source_extension_dir
+from streamseeker.distribution import (
+    link_extension,
+    source_extension_dir,
+    sync_extension,
+)
 
 
 class InstallExtensionCommand(Command):
@@ -21,38 +24,83 @@ class InstallExtensionCommand(Command):
 
     options = [
         option("update", None, "Overwrite an existing installation.", flag=True),
+        option(
+            "link",
+            None,
+            "Symlink the install dir to the source repo (developer mode — file edits go live).",
+            flag=True,
+        ),
         option("no-open", None, "Don't open the browser automatically.", flag=True),
     ]
 
     def handle(self) -> int:
         try:
-            src = source_extension_dir()
+            source_extension_dir()  # validates existence early
         except FileNotFoundError as exc:
             self.line(f"<error>{exc}</error>")
             return 2
 
         target = paths.extension_dir()
+
+        if self.option("link"):
+            try:
+                target = link_extension()
+            except OSError as exc:
+                self.line(f"<error>Symlink failed: {exc}</error>")
+                return 2
+            self.line(
+                f"<info>Extension linked (developer mode):</info> {target} "
+                f"→ source repo"
+            )
+            self.line(
+                "<comment>File edits in the repo are now live. Click 'Reload' "
+                "in chrome://extensions/ after each change.</comment>"
+            )
+            if not self.option("no-open"):
+                _open_extensions_page(self)
+            self._print_install_instructions(target)
+            return 0
+
         update = bool(self.option("update"))
 
-        if target.exists():
-            if not update:
-                self.line(
-                    f"<comment>Extension already installed at {target}. "
-                    f"Re-run with --update to overwrite.</comment>"
-                )
-                return 1
-            shutil.rmtree(target)
+        if target.exists() and not target.is_symlink() and not update:
+            self.line(
+                f"<comment>Extension already installed at {target}. "
+                f"Re-run with --update to overwrite.</comment>"
+            )
+            return 1
 
-        shutil.copytree(src, target)
-        self.line(f"<info>Extension copied to:</info> {target}")
+        if target.is_symlink():
+            self.line(
+                f"<comment>{target} is a developer symlink — removing it "
+                f"so the bundled copy can be installed.</comment>"
+            )
+            target.unlink()
+
+        result = sync_extension(force=True)
+        if result.action == "updated":
+            self.line(
+                f"<info>Extension updated:</info> "
+                f"{result.installed_version} → {result.bundled_version}"
+            )
+        elif result.action == "installed":
+            self.line(
+                f"<info>Extension installed</info> (version {result.bundled_version})"
+            )
+        else:
+            self.line(f"<info>Extension copied to:</info> {target}")
 
         if not self.option("no-open"):
             _open_extensions_page(self)
 
         self._print_install_instructions(target)
         if update:
-            self.line("\n<comment>Tip:</comment> reload the extension in chrome://extensions/ "
-                      "so Chrome picks up the new files.")
+            self.line(
+                "\n<comment>Tip:</comment> reload the extension in chrome://extensions/ "
+                "so Chrome picks up the new files (the extension also reloads "
+                "itself when its background worker notices the disk version "
+                "changed)."
+            )
         return 0
 
     def _print_install_instructions(self, target: Path) -> None:
