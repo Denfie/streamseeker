@@ -543,14 +543,6 @@
     return builder ? builder(row.slug) : null;
   }
 
-  function episodeUrlFor(stream, slug, season, episode) {
-    const base = STREAM_URL_BUILDERS[stream] ? STREAM_URL_BUILDERS[stream](slug) : null;
-    if (!base) return null;
-    if (season && episode) return `${base}/staffel-${season}/episode-${episode}`;
-    if (season) return `${base}/staffel-${season}`;
-    return base;
-  }
-
   // Mirror of streamseeker.api.core.metadata.base.localize_block — when an
   // external block carries translations[lang], overlay {title, overview,
   // genres, tagline} from there; otherwise return the block unchanged so
@@ -595,12 +587,13 @@
     card.className = "card";
     card.dataset.title = slug || "";
 
-    const url = episodeUrlFor(stream, slug, season, episode);
-    if (url) {
-      card.title = `Auf ${STREAM_LABELS[stream] || stream} öffnen`;
+    if (key) {
+      card.title = window.ssI18n.t("card.show_details");
       card.addEventListener("click", (ev) => {
         if (ev.target.closest("button")) return;
-        chrome.tabs.create({ url });
+        const cached = (libraryFilter.rows || []).find((r) => r.key === key);
+        const row = cached || { key, stream, slug, title: slug };
+        showDetailModal(row);
       });
     } else {
       card.style.cursor = "default";
@@ -1141,6 +1134,31 @@
 
     wrap.appendChild(dlSection);
 
+    // --- Section: Stream-Page Overlay ---
+    const overlay = document.createElement("section");
+    overlay.className = "settings__section";
+    overlay.innerHTML = `<h3>${t("settings.section.overlay")}</h3>`;
+
+    const overlayLabel = document.createElement("label");
+    overlayLabel.className = "settings__field settings__field--checkbox";
+    const overlayCheckbox = document.createElement("input");
+    overlayCheckbox.type = "checkbox";
+    overlayCheckbox.id = "settings-overlay-collapsed-default";
+    // ?? handles the case where the daemon hasn't shipped the key yet
+    overlayCheckbox.checked = data.config && data.config.overlay_collapsed_default !== false;
+    const overlayText = document.createElement("span");
+    overlayText.textContent = t("settings.overlay.collapsed_default");
+    overlayLabel.appendChild(overlayCheckbox);
+    overlayLabel.appendChild(overlayText);
+    overlay.appendChild(overlayLabel);
+
+    const overlayHint = document.createElement("p");
+    overlayHint.className = "settings__hint";
+    overlayHint.textContent = t("settings.overlay.hint");
+    overlay.appendChild(overlayHint);
+
+    wrap.appendChild(overlay);
+
     // --- Section: Metadata ---
     const meta = document.createElement("section");
     meta.className = "settings__section";
@@ -1259,6 +1277,7 @@
           preferred_provider: providerSelect.value,
           max_concurrent: parseInt(concInput.value, 10) || 5,
           max_retries: parseInt(retryInput.value, 10) || 3,
+          overlay_collapsed_default: overlayCheckbox.checked,
         },
       };
       if (langChoice) payload.config.language = langChoice;

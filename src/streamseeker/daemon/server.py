@@ -430,6 +430,7 @@ def create_app() -> FastAPI:
         "ddos_limit",
         "ddos_timer",
         "language",
+        "overlay_collapsed_default",
     }
 
     def _read_config_safely() -> dict:
@@ -451,7 +452,15 @@ def create_app() -> FastAPI:
         cfg = _read_config_safely()
         creds = paths.load_credentials()
         return {
-            "config": {**cfg, "language": cfg.get("language") or DEFAULT_LANGUAGE},
+            "config": {
+                **cfg,
+                "language": cfg.get("language") or DEFAULT_LANGUAGE,
+                # New stream-page overlay starts collapsed unless overridden;
+                # the per-tab toggle is still allowed via localStorage.
+                "overlay_collapsed_default": bool(
+                    cfg.get("overlay_collapsed_default", True)
+                ),
+            },
             "supported_languages": list(SUPPORTED_LANGUAGES),
             "credentials": {
                 # Boolean flags only — never echo the actual key.

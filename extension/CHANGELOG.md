@@ -7,6 +7,23 @@ required CLI version via the `minCliVersion` key in `manifest.json`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.22.0] - 2026-04-28
+
+### Changed
+
+- **Status-Tab: Klick auf einen Download öffnet jetzt das Detail-Overlay**
+  statt zur Stream-Seite zu springen. Konsistent mit der Sammlung;
+  von dort führt der "Auf … öffnen"-Button weiterhin zur Originalseite.
+
+## [0.21.0] - 2026-04-28
+
+### Added
+
+- **Stream-Seiten-Overlay: Standard-Kollabier-Status in den Settings**
+  konfigurierbar (neue Section "Stream-Seiten-Overlay"). Der Footer ist
+  per Default zugeklappt; manuelles Auf-/Zuklappen pro Tab überschreibt
+  diesen Default browserlokal.
+
 ## [0.20.0] - 2026-04-27
 
 ### Removed

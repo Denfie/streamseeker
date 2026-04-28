@@ -736,6 +736,21 @@ input[type="search"]:focus {
 }
 .settings__field > span { font-weight: 600; }
 
+/* Inline checkbox row variant — checkbox + label on the same line. */
+.settings__field--checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+.settings__field--checkbox > span {
+  font-weight: 500;
+  color: var(--text);
+}
+.settings__field--checkbox input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+}
+
 .settings__field input,
 .settings__field select {
   padding: 6px 8px;

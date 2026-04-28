@@ -100,14 +100,48 @@
 
   // Collapse state persists across page loads via localStorage so users who
   // minimise on one page aren't re-ambushed on every navigation.
+  // ``null`` from explicitCollapsed() means "user never toggled here, fall
+  // back to the daemon-side default" (stored in
+  // ``streamseeker:overlay-default-collapsed``, refreshed each page load).
   const COLLAPSE_STORAGE_KEY = "streamseeker:overlay-collapsed";
-  function isCollapsed() {
-    try { return localStorage.getItem(COLLAPSE_STORAGE_KEY) === "1"; }
-    catch { return false; }
+  const DEFAULT_STORAGE_KEY = "streamseeker:overlay-default-collapsed";
+
+  function explicitCollapsed() {
+    try {
+      const raw = localStorage.getItem(COLLAPSE_STORAGE_KEY);
+      if (raw === "1") return true;
+      if (raw === "0") return false;
+      return null;
+    } catch { return null; }
   }
   function setCollapsed(value) {
     try { localStorage.setItem(COLLAPSE_STORAGE_KEY, value ? "1" : "0"); }
     catch { /* private mode etc. — ignore */ }
+  }
+  function defaultCollapsed() {
+    try {
+      const raw = localStorage.getItem(DEFAULT_STORAGE_KEY);
+      if (raw === "0") return false;
+      // Treat unset as "true" — server-side default is true and the cache
+      // gets refreshed on every page load below, so this only kicks in
+      // before the first /settings response arrives.
+      return true;
+    } catch { return true; }
+  }
+  function isCollapsed() {
+    const explicit = explicitCollapsed();
+    return explicit === null ? defaultCollapsed() : explicit;
+  }
+  // Refresh the cached default from the daemon. Called once per page load
+  // before the first overlay render so Setting changes propagate within
+  // a page reload — no Chrome extension restart needed.
+  async function refreshOverlayDefault() {
+    try {
+      const settings = await window.ssApi.settingsGet();
+      const value = !!(settings && settings.config &&
+                       settings.config.overlay_collapsed_default);
+      localStorage.setItem(DEFAULT_STORAGE_KEY, value ? "1" : "0");
+    } catch { /* daemon down or no /settings — keep last cached value */ }
   }
 
   async function renderOverlay(options, info, state, title) {
@@ -679,14 +713,18 @@
       return;
     }
 
-    let state;
-    try {
-      state = await window.ssApi.libraryState(options.stream, info.slug);
-    } catch (err) {
-      console.warn("[streamseeker] libraryState failed", err);
+    // Pull the daemon's overlay-default-collapsed setting in parallel with
+    // libraryState — small payload, runs once per page load.
+    const [stateResult] = await Promise.all([
+      window.ssApi.libraryState(options.stream, info.slug)
+        .catch((err) => { console.warn("[streamseeker] libraryState failed", err); return null; }),
+      refreshOverlayDefault(),
+    ]);
+    if (stateResult === null) {
       toast("State konnte nicht geladen werden", { error: true });
       return;
     }
+    const state = stateResult;
 
     if (options.decorateState) options.decorateState(state, info);
 
