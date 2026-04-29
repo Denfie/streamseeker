@@ -83,6 +83,8 @@
     "settings.metadata.refresh": "Metadaten neu laden",
     "settings.metadata.refreshing": "Läuft …",
     "settings.metadata.refresh_queued": "{count} Einträge werden im Hintergrund aktualisiert.",
+    "settings.metadata.refresh_done": "Fertig — {ok} von {total} Einträgen aktualisiert.",
+    "settings.metadata.cancel": "Reset",
     "settings.metadata.hint": "Lädt für jeden Library-Eintrag Beschreibung, Genres und Cover neu — z. B. nach Sprachwechsel. Läuft langsam (≈1.5s pro Eintrag), damit TMDb/AniList nicht ratelimiten.",
     "settings.action.save": "Speichern",
     "settings.action.saving": "Speichere…",

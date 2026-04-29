@@ -54,6 +54,20 @@
       if (!api.versionGte(version.cli, minCliVersion)) {
         showBanner(window.ssI18n.t("header.banner.cli_too_old", { cli: version.cli, min: minCliVersion }));
       }
+
+      // The chrome.alarms-driven auto-reload in background.js depends on the
+      // SW being alive (or being woken by an alarm tick that fires); in
+      // practice we've seen Chrome drop alarms across long idle periods, and
+      // the user opens the popup expecting "the latest". So: every popup open
+      // does a synchronous version probe and reload-banner. Cheap and reliable.
+      try {
+        const disk = await fetch(`${api.BASE}/extension/version`, { cache: "no-store" })
+          .then((r) => r.ok ? r.json() : null);
+        if (disk && disk.version && api.versionGte(disk.version, manifest.version)
+            && disk.version !== manifest.version) {
+          showReloadBanner(disk.version);
+        }
+      } catch (_) { /* daemon may be slow / down — silent */ }
     } catch (err) {
       console.warn("[streamseeker] init failed", err);
     }
@@ -129,6 +143,66 @@
     el.hidden = false;
   }
 
+  // Persistent banner inside the Status tab that surfaces a tripped
+  // circuit breaker. Hides itself when ``paused === false``. The text
+  // includes a localized resume time so the user can plan around it,
+  // and an inline "Jetzt fortsetzen" button calls the daemon's resume
+  // endpoint and immediately re-renders.
+  function renderCircuitBanner(circuit) {
+    const host = document.querySelector("#tab-status");
+    if (!host) return;
+    let banner = host.querySelector(".ss-circuit-banner");
+    if (!circuit || !circuit.paused) {
+      if (banner) banner.remove();
+      return;
+    }
+    if (!banner) {
+      banner = document.createElement("div");
+      banner.className = "ss-circuit-banner";
+      host.insertBefore(banner, host.firstChild);
+    }
+    banner.innerHTML = "";
+    const msg = document.createElement("span");
+    const until = circuit.paused_until
+      ? new Date(circuit.paused_until * 1000).toLocaleTimeString([], {
+          hour: "2-digit", minute: "2-digit",
+        })
+      : null;
+    msg.textContent = until
+      ? `Queue pausiert bis ~${until} (zu viele Fehlversuche).`
+      : "Queue pausiert (zu viele Fehlversuche).";
+    banner.appendChild(msg);
+
+    const resumeBtn = document.createElement("button");
+    resumeBtn.type = "button";
+    resumeBtn.textContent = "Jetzt fortsetzen";
+    resumeBtn.addEventListener("click", async () => {
+      resumeBtn.disabled = true;
+      try {
+        await api.queueResumePaused();
+        renderStatus();
+      } catch (_) {
+        resumeBtn.disabled = false;
+      }
+    });
+    banner.appendChild(resumeBtn);
+  }
+
+  function showReloadBanner(diskVersion) {
+    const el = document.querySelector("#ss-banner");
+    el.textContent = "";
+    const span = document.createElement("span");
+    span.textContent = `Neue Version verfügbar (${diskVersion}). `;
+    el.appendChild(span);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = "Jetzt laden";
+    btn.style.cssText = "margin-left:8px;padding:2px 8px;border:0;border-radius:4px;background:#fff;color:#000;cursor:pointer;font:inherit;";
+    btn.addEventListener("click", () => chrome.runtime.reload());
+    el.appendChild(btn);
+    el.hidden = false;
+  }
+
   // ----- Tabs -------------------------------------------------------
 
   function wireTabs() {
@@ -166,6 +240,11 @@
       if (gen !== statusRenderGen) return;
       const summary = data.summary || {};
       const progress = data.progress || [];
+      // Reflect the circuit breaker on every status tick so the banner
+      // appears within seconds of the breaker tripping (or clears the
+      // moment it's manually resumed). Tolerant of missing field for
+      // backwards compatibility with older daemons.
+      renderCircuitBanner(data.circuit || { paused: false });
 
       const items = await api.queueList();
       if (gen !== statusRenderGen) return;
@@ -349,7 +428,13 @@
     if (filterState.stream) rows = rows.filter((r) => r.stream === filterState.stream);
     if (filterState.favoritesOnly) rows = rows.filter((r) => r.favorite);
     if (filterState.fsk != null) {
-      rows = rows.filter((r) => parseFskNumber(r.fsk) === filterState.fsk);
+      // Buckets are age ranges: 0=[0-5], 6=[6-11], 12=[12-15], 16=[16-17],
+      // 18=[18+]. parseRating maps every system into the same bucket so a
+      // TV-14 entry surfaces under the FSK 12 filter, etc.
+      rows = rows.filter((r) => {
+        const parsed = parseRating(r.fsk);
+        return parsed && parsed.bucket === filterState.fsk;
+      });
     }
     const needle = (filterState.searchTerm || "").trim().toLowerCase();
     if (needle) {
@@ -365,16 +450,6 @@
     for (const row of rows) {
       container.appendChild(renderCard(row, { showPromote: false }));
     }
-  }
-
-  // Strip "FSK " prefix and trailing punctuation; "FSK 12" → 12, "12" → 12,
-  // "TV-MA" → null. Keeps the filter robust against TMDb's free-form fields.
-  function parseFskNumber(raw) {
-    if (raw == null) return null;
-    const m = String(raw).match(/\d{1,2}/);
-    if (!m) return null;
-    const n = parseInt(m[0], 10);
-    return [0, 6, 12, 16, 18].includes(n) ? n : null;
   }
 
   function activeFilterCount(filterState) {
@@ -403,8 +478,13 @@
 
     const t = window.ssI18n.t;
     const streams = Array.from(new Set(rows.map((r) => r.stream).filter(Boolean))).sort();
+    // Build the filter chip list from age buckets, not raw rating strings,
+    // so "FSK 12 / TV-14 / TV-PG / PG-13" all collapse into one chip.
     const fskValues = Array.from(
-      new Set(rows.map((r) => parseFskNumber(r.fsk)).filter((n) => n != null))
+      new Set(rows.map((r) => {
+        const parsed = parseRating(r.fsk);
+        return parsed ? parsed.bucket : null;
+      }).filter((n) => n != null))
     ).sort((a, b) => a - b);
 
     const addSection = (titleKey, controls) => {
@@ -681,23 +761,69 @@
   }
 
   // FSK-Farbschema: 0 = weiß, 6 = gelb, 12 = grün, 16 = blau, 18 = rot.
-  // Akzeptiert "FSK 12", "12", 12. Andere Zertifikate (z.B. "TV-MA")
-  // werden ignoriert, weil sie keine FSK-Zahl sind.
-  function parseFskNumber(raw) {
+  // Alle Rating-Systeme (FSK, TV-*, MPAA) werden über parseRating() in
+  // diese fünf Buckets gemappt — siehe RATING_MAP.
+
+  // Map any rating string the metadata providers hand us (FSK 12, TV-14,
+  // PG-13, R, …) onto a renderable badge: a short label and one of the
+  // existing FSK colour buckets so we don't have to design new palettes.
+  // Order in RATING_MAP matters — longer matches (TV-Y7, PG-13) come before
+  // their prefixes (TV-Y, PG) so `\b…\b` lookups resolve unambiguously.
+  // Bucket = FSK age band (0=[0-5], 6=[6-11], 12=[12-15], 16=[16-17], 18=[18+])
+  // — TV/MPAA ratings are mapped to the bucket that matches their minimum age
+  // so the filter catches related labels uniformly.
+  // Separators between letters and digits are optional in the regex
+  // ("PG-13" / "PG13" / "PG 13" all match) — TMDb often drops them.
+  const RATING_MAP = [
+    { re: /\bFSK[-\s]?0\b/i,        label: "0",     bucket: 0  },
+    { re: /\bFSK[-\s]?6\b/i,        label: "6",     bucket: 6  },
+    { re: /\bFSK[-\s]?12\b/i,       label: "12",    bucket: 12 },
+    { re: /\bFSK[-\s]?16\b/i,       label: "16",    bucket: 16 },
+    { re: /\bFSK[-\s]?18\b/i,       label: "18",    bucket: 18 },
+    { re: /\bTV[-\s]?Y7\b/i,        label: "TV-Y7", bucket: 6  },
+    { re: /\bTV[-\s]?Y\b/i,         label: "TV-Y",  bucket: 0  },
+    { re: /\bTV[-\s]?G\b/i,         label: "TV-G",  bucket: 0  },
+    { re: /\bTV[-\s]?PG\b/i,        label: "TV-PG", bucket: 6  },
+    { re: /\bTV[-\s]?14\b/i,        label: "TV-14", bucket: 12 },
+    { re: /\bTV[-\s]?MA\b/i,        label: "TV-MA", bucket: 16 },
+    { re: /\bNC[-\s]?17\b/i,        label: "NC-17", bucket: 18 },
+    { re: /\bPG[-\s]?13\b/i,        label: "PG-13", bucket: 12 },
+    { re: /\bPG\b/i,                label: "PG",    bucket: 6  },
+    { re: /\bNR\b/i,                label: "NR",    bucket: 0  },
+    { re: /\bUR\b/i,                label: "UR",    bucket: 18 },
+    { re: /\bR\b/i,                 label: "R",     bucket: 16 },
+    { re: /\bG\b/i,                 label: "G",     bucket: 0  },
+  ];
+
+  function parseRating(raw) {
     if (raw == null) return null;
-    const m = String(raw).match(/\b(\d{1,2})\b/);
-    if (!m) return null;
-    const n = parseInt(m[1], 10);
-    return [0, 6, 12, 16, 18].includes(n) ? n : null;
+    const s = String(raw).trim();
+    if (!s) return null;
+    for (const m of RATING_MAP) {
+      if (m.re.test(s)) return { label: m.label, bucket: m.bucket };
+    }
+    // Last-ditch: a bare number that's not a known FSK bucket — show as text
+    const num = s.match(/\b(\d{1,2})\b/);
+    if (num) {
+      const n = parseInt(num[1], 10);
+      if ([0, 6, 12, 16, 18].includes(n)) return { label: String(n), bucket: n };
+      // Closest bucket so colour stays meaningful (e.g. "14" → 12)
+      const bucket = [0, 6, 12, 16, 18].reduce(
+        (best, b) => Math.abs(b - n) < Math.abs(best - n) ? b : best, 0
+      );
+      return { label: String(n), bucket };
+    }
+    return null;
   }
 
   function renderFskBadge(raw) {
-    const n = parseFskNumber(raw);
-    if (n == null) return null;
+    const r = parseRating(raw);
+    if (r == null) return null;
     const badge = document.createElement("span");
-    badge.className = `fsk-badge fsk-badge--${n}`;
-    badge.textContent = String(n);
-    badge.title = `FSK ${n}`;
+    const isText = r.label.length > 2;
+    badge.className = `fsk-badge fsk-badge--${r.bucket}` + (isText ? " fsk-badge--text" : "");
+    badge.textContent = r.label;
+    badge.title = String(raw);
     return badge;
   }
 
@@ -908,6 +1034,37 @@
         hideDetailModal();
       });
       actionsEl.appendChild(openBtn);
+    }
+
+    // Missing-episodes shortcut: only meaningful for series, and only when at
+    // least one episode is still missing. Hide for movies and fully-downloaded
+    // collections to keep the UI honest about what the button will do.
+    const isSeries = (entry.type || row.type || "staffel") !== "filme";
+    const missingCount = isSeries ? Math.max(0, totalEpisodes - downloaded) : 0;
+    if (isSeries && missingCount > 0) {
+      const missingBtn = document.createElement("button");
+      missingBtn.type = "button";
+      missingBtn.className = "detail__secondary";
+      missingBtn.textContent = `Fehlende Episoden laden (${missingCount})`;
+      missingBtn.addEventListener("click", async () => {
+        missingBtn.disabled = true;
+        const prev = missingBtn.textContent;
+        missingBtn.textContent = "…";
+        try {
+          const res = await api.queueAdd({
+            stream: entry.stream || row.stream,
+            slug: entry.slug || row.slug,
+            type: entry.type || row.type || "staffel",
+            scope: "missing",
+          });
+          missingBtn.textContent = `${res?.count ?? 0} eingereiht ✓`;
+          setTimeout(() => { missingBtn.textContent = prev; missingBtn.disabled = false; }, 2000);
+        } catch (err) {
+          missingBtn.textContent = `✕ ${err.message || "Fehler"}`;
+          setTimeout(() => { missingBtn.textContent = prev; missingBtn.disabled = false; }, 2500);
+        }
+      });
+      actionsEl.appendChild(missingBtn);
     }
 
     const iconRow = document.createElement("div");
@@ -1217,9 +1374,9 @@
     langHint.textContent = t("settings.language.hint");
     lang.appendChild(langHint);
 
-    // "Refresh metadata" — re-fetches every library entry's external
-    // metadata so the active language's translations get populated. Paced
-    // server-side; we just trigger and report.
+    // "Refresh metadata" — paced server-side. Popup polls the status
+    // endpoint every second, drives a progress bar, and re-enables the
+    // button only when the worker has finished.
     const refreshRow = document.createElement("div");
     refreshRow.className = "settings__refresh-row";
     const refreshBtn = document.createElement("button");
@@ -1228,27 +1385,109 @@
     refreshBtn.textContent = t("settings.metadata.refresh");
     const refreshStatus = document.createElement("span");
     refreshStatus.className = "settings__status";
+    refreshRow.appendChild(refreshBtn);
+    refreshRow.appendChild(refreshStatus);
+    lang.appendChild(refreshRow);
+
+    // Progress UI — hidden until a refresh actually starts. Lives below
+    // the row so the button stays put. The reset button cancels a stuck
+    // run server-side; the worker checks the flag once per iteration.
+    const progressWrap = document.createElement("div");
+    progressWrap.className = "settings__progress";
+    progressWrap.hidden = true;
+    const progressBar = document.createElement("div");
+    progressBar.className = "settings__progress-bar";
+    const progressFill = document.createElement("div");
+    progressFill.className = "settings__progress-fill";
+    progressBar.appendChild(progressFill);
+    const progressLabel = document.createElement("span");
+    progressLabel.className = "settings__progress-label";
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "settings__progress-cancel";
+    cancelBtn.textContent = t("settings.metadata.cancel");
+    cancelBtn.addEventListener("click", async () => {
+      cancelBtn.disabled = true;
+      try {
+        await api.libraryRefreshAllCancel();
+        // pollOnce flips state when the worker actually exits.
+      } catch (_) { cancelBtn.disabled = false; }
+    });
+    progressWrap.appendChild(progressBar);
+    progressWrap.appendChild(progressLabel);
+    progressWrap.appendChild(cancelBtn);
+    lang.appendChild(progressWrap);
+
+    let pollTimer = null;
+
+    function setProgress(current, total) {
+      const safeTotal = Math.max(1, total || 0);
+      const pct = Math.min(100, Math.round((current / safeTotal) * 100));
+      progressFill.style.width = `${pct}%`;
+      progressLabel.textContent = `${current} / ${total}`;
+    }
+
+    function stopPolling() {
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    }
+
+    async function pollOnce() {
+      try {
+        const s = await api.libraryRefreshAllStatus();
+        if (!s) return;
+        setProgress(s.current || 0, s.total || 0);
+        if (!s.running) {
+          stopPolling();
+          progressWrap.hidden = true;
+          refreshBtn.disabled = false;
+          const ok = (s.success || 0);
+          const total = (s.total || 0);
+          refreshStatus.textContent = t("settings.metadata.refresh_done", { ok, total });
+          refreshStatus.style.color = "var(--success)";
+        }
+      } catch (_) { /* ignore — daemon might be slow */ }
+    }
+
     refreshBtn.addEventListener("click", async () => {
       refreshBtn.disabled = true;
       refreshStatus.textContent = t("settings.metadata.refreshing");
       refreshStatus.style.color = "";
+      progressWrap.hidden = false;
+      cancelBtn.disabled = false;
+      setProgress(0, 0);
       try {
         const result = await api.libraryRefreshAll();
-        const count = (result && result.queued) || 0;
-        refreshStatus.textContent = t("settings.metadata.refresh_queued", { count });
-        refreshStatus.style.color = "var(--success)";
+        const total = (result && result.queued) || 0;
+        setProgress(0, total);
+        // Poll once immediately so the bar fills with the first entry's
+        // success without waiting a full second; then every 1s.
+        await pollOnce();
+        if (pollTimer == null) pollTimer = setInterval(pollOnce, 1000);
       } catch (err) {
+        progressWrap.hidden = true;
         refreshStatus.textContent = t("settings.action.error", {
           message: err.message || "Error",
         });
         refreshStatus.style.color = "var(--danger)";
-      } finally {
         refreshBtn.disabled = false;
       }
     });
-    refreshRow.appendChild(refreshBtn);
-    refreshRow.appendChild(refreshStatus);
-    lang.appendChild(refreshRow);
+
+    // If the popup re-opens while a refresh is mid-flight, hook into it
+    // so the button stays correctly disabled and the bar resumes.
+    (async () => {
+      try {
+        const s = await api.libraryRefreshAllStatus();
+        if (s && s.running) {
+          refreshBtn.disabled = true;
+          refreshStatus.textContent = t("settings.metadata.refreshing");
+          progressWrap.hidden = false;
+          cancelBtn.disabled = false;
+          setProgress(s.current || 0, s.total || 0);
+          if (pollTimer == null) pollTimer = setInterval(pollOnce, 1000);
+        }
+      } catch (_) { /* ignore */ }
+    })();
 
     const refreshHint = document.createElement("p");
     refreshHint.className = "settings__hint";

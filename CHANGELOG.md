@@ -8,10 +8,80 @@ See [docu-intern/versioning.md](docu-intern/versioning.md) for the release proce
 
 The browser extension is released independently; see `extension/CHANGELOG.md`.
 
-## [Unreleased]
+## [0.3.0] - 2026-04-29
 
 ### Added
 
+- **Circuit-Breaker für die Download-Queue.** Wenn binnen kurzer Zeit
+  zu viele Downloads in Folge fehlschlagen (Standard: 5 Fehlschläge in
+  10 min), pausiert der Worker den gesamten Queue-Lauf für mehrere
+  Stunden (Standard: 4 h) und nimmt erst danach wieder Items auf.
+  Schwellen über `circuit_failure_threshold`,
+  `circuit_failure_window` und `circuit_pause_seconds` in der
+  `config.json` einstellbar. Status (paused/paused_until) wird über
+  `GET /status` mitgeliefert; manuelles Aufheben via
+  `POST /queue/resume`.
+
+### Changed
+
+- Anpassungen für besseren Datenabruf bei VOE — weniger Fehlversuche,
+  wenn der Anbieter zwischendurch zickt.
+
+### Fixed
+
+- Robusterer Datenabruf bei s.to.
+- **Sammlung-Card: korrekte Episoden-Totals statt "1/1".** Beim
+  Hinzufügen zur Sammlung wird die volle Staffel-/Episodenanzahl
+  ermittelt, sodass Karten und Detailansicht direkt `0/10` (oder
+  was auch immer korrekt ist) zeigen statt nur die Anzahl bereits
+  geladener Episoden.
+
+### Added
+
+- **Library-Stub + Auto-Enrichment beim Enqueue.** Sobald eine
+  Episode/Serie/Film in die Queue geht, legt der Daemon synchron einen
+  minimalen Library-Eintrag an (Titel = Slug-Heuristik) und stößt im
+  Hintergrund TMDb/AniList-Anreicherung + Season-Total-Fetch an. Die
+  Sammlung zeigt die Serie damit sofort mit Cover/Beschreibung/FSK an,
+  statt erst nach Abschluss des ersten Downloads. Spiegel der Logik,
+  die Favoriten-Add seit jeher nutzt.
+- **`LibraryStore.update_season_totals(key, counts)`** — schreibt nur
+  `episode_count` pro Saison, ohne `downloaded`-Arrays anzufassen.
+  Wird vom Stub-Worker und kann auch manuell zum Backfill genutzt
+  werden (`from streamseeker.daemon.server import
+  _populate_season_totals`).
+- **`/library/{key}/refresh` und `/library/refresh-all` ziehen jetzt
+  auch die echten Season-Totals.** Beim Klick auf "Metadaten neu laden"
+  (im Detail-Overlay oder Settings) werden zusätzlich zur
+  TMDb/AniList-Anreicherung `stream.search_seasons`/`search_episodes`
+  aufgerufen, damit alte Library-Einträge endlich `2/62` statt `2/2`
+  anzeigen. Filme (`type=='filme'`) und Season 0 (s.to-Filmsektion)
+  werden übersprungen.
+
+- Datenabruf bei s.to an aktuellen Stand der Webseite angepasst.
+  FSK/PG-Filter davon nicht betroffen.
+
+### Added
+
+- **`/library/refresh-all/status` und `/library/refresh-all/cancel`**.
+  Erstes liefert `{running, current, total, success, started_at,
+  finished_at, cancel_requested}` für die Popup-Progressbar; zweites
+  setzt ein Cancel-Flag, das der Background-Worker am Anfang jeder
+  Iteration prüft und sauber abbricht. Nicht-blockierend, idempotent.
+
+### Changed
+
+- **`enqueue_missing` überspringt Saison 0** (s.to-Filme bzw. Specials
+  bei aniworldto). Die "Fehlende Episoden"-Aktion soll ausschließlich
+  reguläre TV-Episoden einreihen — Filme laufen über `type='filme'`.
+
+### Added
+
+- **`StreamseekerHandler.enqueue_missing()` + neuer `scope: "missing"`**
+  für `POST /queue`. Reiht alle Episoden einer Serie ein, die weder im
+  Library-Eintrag als `downloaded` markiert sind noch bereits in der
+  Queue stehen. Filme werden nur eingereiht, wenn nicht bereits
+  vorhanden / in Queue.
 - **TMDb-Metadaten zweisprachig.** Der TMDb-Provider holt nun für jede
   Serie/Film zwei Sprachen: `en-US` als Top-Level (Universal-Fallback)
   und `de-DE` als Translation unter `external.tmdb.translations.de`.

@@ -1,6 +1,6 @@
 [project]
 name = "streamseeker"
-version = "0.2.0"
+version = "0.3.0"
 description = "Track your favourite series, animes and movies across streaming sites and maintain a personal collection."
 readme = "README.md"
 license = { text = "MIT" }
@@ -36,6 +36,12 @@ dependencies = [
     # h11 0.16.0 fixes malformed Chunked-Encoding parsing (CVE-2025-43859).
     "urllib3>=2.6.3,<3",
     "h11>=0.16.0,<1",
+    # curl_cffi mimics Chrome's TLS fingerprint without spawning a browser
+    # process, so DDoS-Guard / Cloudflare basic checks (e.g. on rotating
+    # VOE redirect domains like timmaybealready.com) let us through. Used
+    # by RequestHandler when available; we fall back to urllib if the
+    # native libcurl-impersonate isn't present on the host.
+    "curl-cffi>=0.7.0,<1",
 ]
 
 [project.optional-dependencies]

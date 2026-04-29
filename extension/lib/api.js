@@ -56,6 +56,7 @@
     queueResume: (fileName) => request("POST", `/queue/${encodeURI(fileName)}/resume`),
     queueRetry: (fileName) => request("POST", `/queue/${encodeURI(fileName)}/retry`),
     queueDelete: (fileName) => request("DELETE", `/queue/${encodeURI(fileName)}`),
+    queueResumePaused: () => request("POST", `/queue/resume`),
 
     libraryList: () => request("GET", "/library"),
     libraryGet: (key) => request("GET", `/library/${encodeURIComponent(key)}`),
@@ -80,6 +81,8 @@
     updatesDismiss: (key) => request("POST", `/updates/${encodeURIComponent(key)}/dismiss`),
     updatesDismissAll: () => request("POST", `/updates/dismiss-all`),
     libraryRefreshAll: () => request("POST", `/library/refresh-all?reset=true`),
+    libraryRefreshAllStatus: () => request("GET", `/library/refresh-all/status`),
+    libraryRefreshAllCancel: () => request("POST", `/library/refresh-all/cancel`),
 
     favoritesList: () => request("GET", "/favorites"),
     favoritesAdd: (stream, slug) => request("POST", "/favorites", { stream, slug }),

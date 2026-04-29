@@ -82,6 +82,8 @@
     "settings.metadata.refresh": "Refresh metadata",
     "settings.metadata.refreshing": "Working …",
     "settings.metadata.refresh_queued": "{count} entries are being refreshed in the background.",
+    "settings.metadata.refresh_done": "Done — {ok} of {total} entries refreshed.",
+    "settings.metadata.cancel": "Reset",
     "settings.metadata.hint": "Re-fetches description, genres and cover for every library entry — e.g. after a language switch. Paced (~1.5s per entry) so TMDb/AniList don't rate-limit us.",
     "settings.action.save": "Save",
     "settings.action.saving": "Saving…",

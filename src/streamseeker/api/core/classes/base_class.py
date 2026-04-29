@@ -21,15 +21,15 @@ class BaseClass(metaclass=Singleton):
             return None
         return self.requests[name]
     
-    def request(self, url, headers=None):
+    def request(self, url, headers=None, impersonate=False):
         response = self.get_request(url)
 
         if response is None:
             request = RequestHandler()
-            response = request.get(url, headers)
+            response = request.get(url, headers, impersonate=impersonate)
             if(response is None):
                 return None
-            
+
             plain_html = response.read()
             dict = {
                 "referer": response.url,
@@ -39,7 +39,7 @@ class BaseClass(metaclass=Singleton):
             }
             self.set_request(url, dict)
             return dict
-    
+
         return response
     
     def request_json(self, url, headers=None):

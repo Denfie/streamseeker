@@ -59,7 +59,16 @@ class VoeProvider(ProviderBase):
             raise ValueError(f"Failed to decode VOE string: {err}") from err
 
     def get_download_url(self, url):
-        request = self.request(url)
+        # Force the curl_cffi-backed Chrome impersonation for VOE: the player
+        # sits behind DDoS-Guard / Cloudflare on rotating domains
+        # (voe.sx → e.g. timmaybealready.com), and plain urllib gets
+        # served a JS challenge instead of the player markup.
+        # ``BaseClass.request`` caches by URL, so we drop the cache before
+        # retrying so a stale challenge response doesn't get reused.
+        self.requests.pop(url, None)
+        request = self.request(url, impersonate=True)
+        if request is None:
+            raise CacheUrlError(f"No response from {self.title} for {url}")
         html_page = request["plain_html"].decode("utf-8")
 
         request_handler = RequestHandler()
@@ -101,13 +110,33 @@ class VoeProvider(ProviderBase):
         raise CacheUrlError(f"Could not get cache url for {self.title}")
   
     def download(self, url, file_name):
-        try:
-            cache_url = self.get_download_url(url)
-        except CacheUrlError as e:
-            logger.error(f"ERROR: {e}")
-            raise CacheUrlError(e)
-        
-        os.makedirs(os.path.dirname(file_name), exist_ok=True)        
+        # DDoS-Guard occasionally serves a 5-second JS challenge on the
+        # first request even with TLS impersonation enabled. Retrying with
+        # a short backoff after a fresh handshake usually clears it.
+        # Three attempts, increasing wait — the queue retries the item
+        # again later anyway, so this just covers the transient case.
+        last_error = None
+        for attempt in range(1, 4):
+            try:
+                cache_url = self.get_download_url(url)
+                break
+            except CacheUrlError as e:
+                last_error = e
+                if attempt < 3:
+                    backoff = 2 + attempt * 4  # 6s, 10s
+                    logger.warning(
+                        f"VOE attempt {attempt}/3 failed ({e}); "
+                        f"retrying in {backoff}s"
+                    )
+                    import time as _time
+                    _time.sleep(backoff)
+                    self.cache_attemps = 0
+                    continue
+        else:
+            logger.error(f"ERROR: {last_error}")
+            raise CacheUrlError(last_error)
+
+        os.makedirs(os.path.dirname(file_name), exist_ok=True)
         self._downloader = DownloaderFFmpeg(cache_url, file_name)
         self._downloader.start()
 

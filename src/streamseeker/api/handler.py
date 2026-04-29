@@ -282,6 +282,61 @@ class StreamseekerHandler(BaseClass):
 
         return count
 
+    def enqueue_missing(self, stream_name: str, preferred_provider: str, name: str, language: str, type: str) -> int:
+        """Enqueue every episode that is neither downloaded nor already queued.
+
+        "Downloaded" comes from the LibraryStore entry; "queued" from the
+        current download queue. Movies (``type == "filme"``) only enqueue if
+        not already downloaded/queued.
+        """
+        from streamseeker.api.core.library.store import LibraryStore, KIND_LIBRARY
+
+        stream = self._streams.get(stream_name)
+        stream.set_config(self.config)
+
+        entry = LibraryStore().get(KIND_LIBRARY, f"{stream_name}::{name}") or {}
+        downloaded_by_season: dict[int, set[int]] = {}
+        for sk, sv in (entry.get("seasons") or {}).items():
+            try:
+                downloaded_by_season[int(sk)] = set(int(e) for e in (sv.get("downloaded") or []))
+            except (TypeError, ValueError):
+                continue
+        movie_downloaded = bool((entry.get("movies") or {}).get("downloaded"))
+
+        queued: set[tuple[int, int]] = set()
+        for q in self._manager.get_queue():
+            if q.get("stream_name") != stream_name or q.get("name") != name:
+                continue
+            try:
+                queued.add((int(q.get("season") or 0), int(q.get("episode") or 0)))
+            except (TypeError, ValueError):
+                continue
+
+        count = 0
+        if type == "filme":
+            if not movie_downloaded and (0, 0) not in queued:
+                count += self.enqueue_single(stream_name, preferred_provider, name, language, type, 0, 0)
+            return count
+
+        seasons_list = stream.search_seasons(name, type)
+        for season in seasons_list or []:
+            # Season 0 on s.to is the Filme-section, on aniworldto specials.
+            # "Fehlende Episoden" reasons over real TV seasons; movies
+            # should be handled via type=='filme' so we never silently
+            # enqueue them here.
+            if int(season) == 0:
+                continue
+            episodes = stream.search_episodes(name, type, season) or []
+            already = downloaded_by_season.get(season, set())
+            for episode in episodes:
+                if episode in already:
+                    continue
+                if (season, episode) in queued:
+                    continue
+                self.enqueue_single(stream_name, preferred_provider, name, language, type, season, episode)
+                count += 1
+        return count
+
     def enqueue_single(self, stream_name: str, preferred_provider: str, name: str, language: str, type: str, season: int = 0, episode: int = 0, url: str = None) -> int:
         """Enqueue a single download item."""
         stream = self._streams.get(stream_name)

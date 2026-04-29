@@ -448,6 +448,7 @@
   // ----- Download modal ----------------------------------------------
 
   const MODE_SERIES = [
+    { key: "missing", label: "Fehlende Episoden", detail: "Nur die, die noch fehlen", needs: [] },
     { key: "all", label: "Komplette Serie", detail: "Alle Staffeln, alle Episoden", needs: [] },
     { key: "season", label: "Komplette Staffel", detail: "Alle Episoden der gewählten Staffel", needs: ["season"] },
     { key: "season_from", label: "Staffel ab Episode", detail: "Gewählte Staffel ab dieser Episode", needs: ["season", "episode"] },
@@ -626,12 +627,23 @@
           await api.libraryMark(basePayload);
           toast("Als vorhanden markiert");
         } else {
-          await api.queueAdd({
+          // The daemon answers with the real enqueued count. Surface it so
+          // a no-op (e.g. scope=missing on a fully-downloaded show, or the
+          // scraper finding zero episodes) doesn't pretend to have queued
+          // anything.
+          const res = await api.queueAdd({
             ...basePayload,
             language: state.language,
             preferred_provider: state.provider,
           });
-          toast("Zur Sammlung hinzugefügt");
+          const count = (res && typeof res.count === "number") ? res.count : null;
+          if (count === 0) {
+            toast("Nichts neues — alles schon vorhanden oder in der Queue", { error: true });
+          } else if (count != null) {
+            toast(`${count} ${count === 1 ? "Episode" : "Episoden"} eingereiht`);
+          } else {
+            toast("Zur Sammlung hinzugefügt");
+          }
         }
         refresh(options, info);
       } catch (err) {

@@ -7,6 +7,121 @@ required CLI version via the `minCliVersion` key in `manifest.json`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.30.0] - 2026-04-29
+
+### Added
+
+- **Banner im Status-Tab, wenn die Queue automatisch pausiert ist.**
+  Wenn der Daemon die Download-Queue wegen einer Häufung von
+  Fehlversuchen pausiert (neuer 0.3.0-CLI-Mechanismus), erscheint im
+  Status-Tab eine gelbe Hinweis-Leiste mit der voraussichtlichen
+  Wiederaufnahme-Zeit und einem "Jetzt fortsetzen"-Button, der die
+  Pause sofort aufhebt (`POST /queue/resume`). Banner verschwindet
+  automatisch, sobald die Pause vorbei ist.
+- `manifest.minCliVersion` auf `0.3.0` angehoben — Popup zeigt
+  ansonsten den bekannten "Daemon-Update nötig"-Banner.
+
+## [0.29.0] - 2026-04-29
+
+### Added
+
+- **Fortschrittsanzeige für "Metadaten neu laden".** Settings → Sammlung
+  → der Button wird beim Klick deaktiviert, darunter erscheint eine
+  Progressbar samt "X / Y"-Counter. Popup pollt `GET
+  /library/refresh-all/status` jede Sekunde, sodass der Stand auch
+  korrekt angezeigt wird, wenn das Popup zwischendurch geschlossen war.
+  Bei Abschluss zeigt das Status-Label "Fertig — N von M Einträgen
+  aktualisiert" und der Button ist wieder aktiv.
+- **Reset-Button neben der Progressbar.** Schickt
+  `POST /library/refresh-all/cancel` an den Daemon — der Worker bricht
+  am nächsten Iterationsstart ab, der Button wird wieder aktiv und der
+  User kann sofort neu starten. Idempotent; tut nichts, wenn gerade
+  kein Refresh läuft.
+
+## [0.28.0] - 2026-04-29
+
+### Changed
+
+- Toast nach `queueAdd` zeigt jetzt die echte Anzahl eingereihter
+  Episoden ("3 Episoden eingereiht"). Bei `count == 0` (z.B. scope=
+  missing wenn alles vorhanden ist) erscheint stattdessen ein
+  Fehler-Toast "Nichts neues — alles schon vorhanden oder in der Queue",
+  damit der Erfolgs-Toast keine Lüge mehr ist.
+
+## [0.27.0] - 2026-04-29
+
+### Changed
+
+- **FSK-Filter berücksichtigt jetzt alle Rating-Systeme.** TV-/MPAA-
+  Bewertungen werden über ihre Mindestalters-Angabe in die FSK-Buckets
+  einsortiert (FSK 0=[0-5], 6=[6-11], 12=[12-15], 16=[16-17], 18=[18+]):
+  TV-Y/TV-G/G → 0; TV-Y7/TV-PG/PG → 6; TV-14/PG-13 → 12; TV-MA/R → 16;
+  NC-17/UR → 18. Filter "FSK 12" zeigt jetzt also auch TV-14- und
+  PG-13-Serien. Der Popover-Chip zeigt nur Buckets, für die in der
+  Sammlung tatsächlich Treffer existieren.
+- Doppelte `parseFskNumber`-Helper aus dem Popup entfernt — alle
+  Rating-Logik geht jetzt über `parseRating()`/`RATING_MAP`.
+
+## [0.26.2] - 2026-04-29
+
+### Fixed
+
+- Unhyphenierte US-Ratings ("PG13", "TV14", "TVMA", "NC17") werden jetzt
+  als Badge erkannt — TMDb gibt sie öfter ohne Bindestrich zurück, was
+  vorher dazu führte, dass die Detail-Ansicht den Wert anzeigte, die
+  Sammlungs-Card aber kein Badge.
+
+## [0.26.1] - 2026-04-29
+
+### Changed
+
+- "Fehlende Episoden"-Detail-Text gekürzt auf "Nur die, die noch fehlen",
+  damit er einzeilig im Modal-Mode-Picker bleibt.
+
+## [0.26.0] - 2026-04-29
+
+### Added
+
+- **"Fehlende Episoden" auch im In-Page-Download-Modal** auf
+  aniworld.to/s.to: neue Auswahl ganz oben in der Modus-Liste, die
+  über den `scope: "missing"`-Endpoint nur die noch fehlenden
+  Episoden einreiht. Spiegelung des Buttons aus dem Popup-Detail-Overlay.
+
+## [0.25.0] - 2026-04-29
+
+### Added
+
+- **Altersfreigaben jenseits von FSK.** Posters zeigen jetzt auch
+  US-TV-Ratings (TV-Y, TV-Y7, TV-G, TV-PG, TV-14, TV-MA), MPAA
+  (G, PG, PG-13, R, NC-17, NR, UR) wenn keine FSK vorhanden ist —
+  als Pille mit Text statt rundem Zahlen-Badge, gleiche Farbschemata
+  über Bucket-Mapping (TV-14 → grün/12er-Bucket, R/TV-MA → rot/18er-Bucket).
+- **FSK-Priorität (Server):** `_index_row` bevorzugt jetzt FSK-Werte
+  ("FSK 12", "12") über US-Ratings beim Befüllen des Sammlung-Cards.
+  Wenn nur TV-Ratings vorhanden sind, wird einer davon angezeigt.
+
+## [0.24.0] - 2026-04-29
+
+### Changed
+
+- **Auto-Update zuverlässiger:** Beim Öffnen des Popups wird jetzt
+  synchron `GET /extension/version` abgefragt; ist die Disk-Version
+  neuer als die laufende, erscheint ein Banner mit "Jetzt laden"-Button
+  (ruft `chrome.runtime.reload()`). Der bisherige `chrome.alarms`-Tick
+  bleibt als Hintergrund-Mechanismus erhalten — Chrome verliert ihn
+  bei langen Idle-Phasen sporadisch, weshalb der Popup-Check als
+  garantierter Fallback dient.
+
+## [0.23.0] - 2026-04-28
+
+### Added
+
+- **"Fehlende Episoden laden"-Button im Detail-Overlay.** Reiht nur jene
+  Episoden ein, die weder in der Library als heruntergeladen markiert
+  noch bereits in der Queue stehen. Der Button zeigt die Anzahl der
+  fehlenden Episoden und ist bei vollständigen Sammlungen / Filmen
+  ausgeblendet. Backend: neuer `scope: "missing"` für `POST /queue`.
+
 ## [0.22.0] - 2026-04-28
 
 ### Changed

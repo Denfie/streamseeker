@@ -49,6 +49,14 @@ class DownloadManager(metaclass=Singleton):
         # with LibraryStore's own lock.
         if item is not None:
             self._record_in_library(item)
+        # Tell the queue processor's circuit breaker that things are healthy
+        # so a streak of recent failures stops counting once a download
+        # actually succeeds. Local import keeps the module-load order safe.
+        try:
+            from streamseeker.api.core.downloader.processor import QueueProcessor
+            QueueProcessor()._register_success()
+        except Exception:  # noqa: BLE001 — observer must never break the success path
+            pass
 
     def report_failure(self, file_name: str) -> None:
         with self._lock:

@@ -63,6 +63,36 @@ header .version {
   font-size: 12px;
 }
 
+/* Inline banner used inside the Status tab when the queue's circuit
+   breaker has tripped. Yellow (warning) instead of red since the
+   queue resumes itself after the cooldown. */
+.ss-circuit-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.38);
+  color: #fbbf24;
+  font-size: 12px;
+}
+
+.ss-circuit-banner > span { flex: 1; }
+
+.ss-circuit-banner > button {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fde68a;
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.ss-circuit-banner > button:hover { background: rgba(245, 158, 11, 0.28); }
+.ss-circuit-banner > button[disabled] { opacity: 0.5; cursor: not-allowed; }
+
 .tabs {
   display: flex;
   gap: 2px;
@@ -175,6 +205,49 @@ header .version {
 }
 .settings__refresh-btn:hover { background: rgba(99, 102, 241, 0.3); }
 .settings__refresh-btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+
+.settings__progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.settings__progress-bar {
+  flex: 1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.settings__progress-fill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, #6366f1, #818cf8);
+  border-radius: 999px;
+  transition: width 220ms ease-out;
+}
+
+.settings__progress-label {
+  font-size: 11px;
+  color: var(--muted, #9ca3af);
+  font-variant-numeric: tabular-nums;
+  min-width: 64px;
+  text-align: right;
+}
+
+.settings__progress-cancel {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.settings__progress-cancel:hover { background: rgba(239, 68, 68, 0.25); }
+.settings__progress-cancel[disabled] { opacity: 0.5; cursor: not-allowed; }
 
 .tab-panel {
   padding: 10px 12px 14px;
@@ -457,6 +530,25 @@ body.ss-detail-open {
 }
 
 .detail__primary:hover { background: var(--accent); }
+
+.detail__secondary {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elev);
+  color: var(--text);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.detail__secondary:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.detail__secondary:disabled { opacity: 0.6; cursor: default; }
 
 /* Icon-only tool row (refresh/search/delete). Square buttons keep the
    row compact so provider chips get their own line below. */
@@ -862,6 +954,27 @@ input[type="search"]:focus {
   border-radius: 3px;
   border-width: 0;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Text-shaped ratings ("TV-14", "PG-13") need a wider pill instead of the
+   round numeric badge. Width grows to fit content; height stays consistent
+   with the round variants so cards align. */
+.fsk-badge--text {
+  width: auto;
+  min-width: 22px;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 9px;
+  letter-spacing: 0.2px;
+}
+
+.fsk-badge--overlay.fsk-badge--text {
+  width: auto;
+  min-width: 14px;
+  padding: 0 4px;
+  height: 14px;
+  font-size: 8px;
+  line-height: 14px;
 }
 
 .detail__search-override {

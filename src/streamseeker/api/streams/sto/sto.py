@@ -183,7 +183,9 @@ class StoStream(StreamBase):
         soup = request_handler.soup(request['plain_html'])
 
         return_array = []
-        pattern = re.compile(r"/serie/stream/(?P<name>.*)/(?P<type>.*)", re.M)
+        # s.to dropped the /stream/ segment from inner links — accept both
+        # the old "/serie/stream/<name>/..." and the new "/serie/<name>/...".
+        pattern = re.compile(r"/serie/(?:stream/)?(?P<name>[^/]+)/(?P<type>.*)", re.M)
 
         for element in soup.findAll('a'):
             href = str(element.get("href", ""))
@@ -219,9 +221,9 @@ class StoStream(StreamBase):
 
         match type:
             case "filme":
-                pattern = re.compile(r"/serie/stream/(?P<name>.*)/filme/film-(?P<count>\d+)", re.M)
+                pattern = re.compile(r"/serie/(?:stream/)?(?P<name>[^/]+)/filme/film-(?P<count>\d+)", re.M)
             case "staffel":
-                pattern = re.compile(r"/serie/stream/(?P<name>.*)/staffel-(?P<count>\d+)", re.M)
+                pattern = re.compile(r"/serie/(?:stream/)?(?P<name>[^/]+)/staffel-(?P<count>\d+)", re.M)
             case _:
                 raise ValueError(f"Type {type} is not supported")
             
@@ -244,7 +246,7 @@ class StoStream(StreamBase):
     # type: type of the serie [filme, staffel]
     # season: season of the serie
     # episode: episode of the serie (default=0)
-    def search_providers(self, name, type, season, episode=0) -> dict: 
+    def search_providers(self, name, type, season, episode=0) -> dict:
         url = self.build_url(name)
 
         match type:
@@ -264,23 +266,25 @@ class StoStream(StreamBase):
 
         dict = {}
         check_array = []
-        pattern = re.compile(r"Hoster (?P<provider>.*)", re.M)
-        for element in soup.findAll('i'):
-            title = str(element.get("title", ""))
-            search = pattern.search(title)
-            if search is None:
+        # s.to switched their player markup to <button class="link-box">
+        # carrying data-provider-name / data-language-id / data-play-url.
+        # The old "Hoster X" <i> titles are gone.
+        for button in soup.find_all('button', class_='link-box'):
+            provider_name = (button.get('data-provider-name') or "").strip()
+            if not provider_name:
                 continue
-            provider = search.group('provider').lower()
-            if provider not in check_array:
-                try:
-                    provider_obj = self._provider_factory.get(provider, source_url=url)
-                except ProviderError:
-                    continue
-                dict[provider] = {
-                    "title": search.group('provider'),
-                    "priority": provider_obj.get_priority()
-                }
-                check_array.append(provider)
+            provider = provider_name.lower()
+            if provider in check_array:
+                continue
+            try:
+                provider_obj = self._provider_factory.get(provider, source_url=url)
+            except ProviderError:
+                continue
+            dict[provider] = {
+                "title": provider_name,
+                "priority": provider_obj.get_priority()
+            }
+            check_array.append(provider)
         # Sort the dictionary by priority
         dict = {k: v for k, v in sorted(dict.items(), key=lambda item: item[1]['priority'])}
         return dict
@@ -297,7 +301,7 @@ class StoStream(StreamBase):
                 raise ValueError(f"Type {type} does not have episodes")
             case "staffel":
                 url = f"{url}/staffel-{season}"
-                pattern = re.compile(r"/serie/stream/(?P<name>.*)/staffel-(?P<seasonCount>\d+)/episode-(?P<episodeCount>\d+)", re.M)
+                pattern = re.compile(r"/serie/(?:stream/)?(?P<name>[^/]+)/staffel-(?P<seasonCount>\d+)/episode-(?P<episodeCount>\d+)", re.M)
             case _:
                 raise ValueError(f"Type {type} is not supported")
         
@@ -326,6 +330,21 @@ class StoStream(StreamBase):
     # type: type of the serie [filme, staffel]
     # season: season of the serie (default=0)
     # episode: episode of the serie (default=0)
+    # Map s.to's language labels (UI strings) to the slugs the rest of
+    # StreamSeeker uses for filenames/queue entries. The site only ships
+    # the human-readable label these days; the numeric data-language-id
+    # is the stable identifier.
+    _LANGUAGE_LABEL_TO_SLUG = {
+        "deutsch": "german",
+        "german": "german",
+        "englisch": "english",
+        "english": "english",
+        "japanisch mit deutschen untertiteln": "german-sub",
+        "deutsch/japanisch mit deutschen untertiteln": "german-sub",
+        "japanisch mit englischen untertiteln": "english-sub",
+        "englisch mit deutschen untertiteln": "german-sub",
+    }
+
     def seach_languages(self, name, type, season=0, episode=0) -> dict:
         url = self.build_url(name)
         default_season = 1
@@ -348,45 +367,55 @@ class StoStream(StreamBase):
         request_handler = RequestHandler()
         soup = request_handler.soup(request['plain_html'])
 
-        change_language_div = soup.find("div", class_="changeLanguageBox")
-
-        if change_language_div is None:
-            return None
-
-        dict = {}
-        check_array = []
-        pattern_src = re.compile(r"/.*/(?P<language>.*)\.svg", re.M)
-            
-        for element in change_language_div.find_all('img'):
-            src = str(element.get("src", ""))
-            search = pattern_src.search(src)
-            if search is None:
+        # New markup: each provider/language combination is its own
+        # <button class="link-box"> with data-language-id + data-language-label.
+        # Collect the distinct languages from those buttons.
+        result: dict = {}
+        for button in soup.find_all('button', class_='link-box'):
+            lang_id = (button.get('data-language-id') or "").strip()
+            label = (button.get('data-language-label') or "").strip()
+            if not lang_id or not label:
                 continue
-            language = search.group('language').lower()
-            if language not in check_array:
-                check_array.append(language)
-                dict[language] = {
-                    "key": element.get("data-lang-key", ""),
-                    "title": element.get("title", "")
+            slug = self._LANGUAGE_LABEL_TO_SLUG.get(label.lower(), label.lower())
+            if slug not in result:
+                result[slug] = {
+                    "key": lang_id,
+                    "title": label,
                 }
-        return dict
+        return result or None
     
     def _get_redirect_url(self, url, language_key, provider):
         request = self.request(url)
         request_handler = RequestHandler()
         soup = request_handler.soup(request['plain_html'])
 
-        links = soup.findAll('li', {"data-lang-key": language_key})
+        # Match the new <button class="link-box"> by data-language-id +
+        # data-provider-name. The data-play-url is a /r?t=<token> path
+        # that 302-redirects to the actual provider URL when followed.
+        provider_norm = (provider or "").lower()
+        for button in soup.find_all('button', class_='link-box'):
+            if (button.get('data-language-id') or "").strip() != str(language_key):
+                continue
+            name = (button.get('data-provider-name') or "").strip().lower()
+            if name != provider_norm:
+                continue
+            play_url = (button.get('data-play-url') or "").strip()
+            if not play_url:
+                continue
+            # /r?t=... is relative to s.to — make absolute and follow once
+            # so callers receive the provider URL directly.
+            if play_url.startswith("/"):
+                play_url = self.urls[0].rstrip("/") + play_url
+            try:
+                resolved = self.request(play_url)
+                # request() stores the post-redirect URL under "referer".
+                final = resolved.get('referer') or play_url
+                return final
+            except Exception:
+                # Fall back to the redirect URL itself; provider extractors
+                # typically follow the 302 internally as well.
+                return play_url
 
-        if len(links) == 0:
-            return None
-        
-        for link in links:
-            # Find a tag that contains an i tag with the title "Hoster {provider}"
-            if link.find('i', title=f"Hoster {provider}") is not None:
-                redirect_url = link.find('a').get('href')
-                return redirect_url
-            
         raise LinkUrlError(f"Could not find a Link for <fg=red>{provider}</> and language {language_key} -> <fg=cyan>{url}</>")
     
     def _get_year(self, url):

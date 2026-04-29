@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import threading
 from datetime import datetime, timezone
@@ -36,6 +37,25 @@ def _atomic_write_json(path: Path, data) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False))
     os.replace(tmp, path)
+
+
+_FSK_PATTERN = re.compile(r"^(FSK[-\s]?)?\s*(\d{1,2})\b", re.IGNORECASE)
+
+
+def _looks_like_fsk(value: str) -> bool:
+    """True if the rating string is a German FSK ("FSK 12", "12", and also
+    publisher-assigned variants like "FSK 14" that TMDb sometimes returns)
+    rather than a US TV/MPAA rating ("TV-14", "PG-13"). Used by
+    ``_index_row`` to prefer the German system for the badge."""
+    if not value:
+        return False
+    s = str(value).strip()
+    if not s:
+        return False
+    # Reject US-style prefixes outright so "TV-14" doesn't slip through.
+    if re.match(r"^(TV|PG|R|G|NC|NR|UR)\b", s, re.IGNORECASE):
+        return False
+    return bool(_FSK_PATTERN.match(s))
 
 
 def _parse_key(key: str) -> tuple[str, str]:
@@ -133,6 +153,35 @@ class LibraryStore(metaclass=Singleton):
                 season_data["episode_count"] = episode
             self._write_entry(KIND_LIBRARY, entry)
             self._update_index_row(KIND_LIBRARY, entry)
+            return entry
+
+    def update_season_totals(self, key: str, counts: dict[int, int]) -> dict | None:
+        """Set ``seasons[N].episode_count`` per season from a real-world
+        scrape — e.g. ``stream.search_episodes()`` returning ``[1..10]``
+        means ``episode_count = 10``. Touches no ``downloaded`` arrays.
+
+        Returns the updated entry or None if the key isn't stored.
+        """
+        if not counts:
+            return None
+        stream, slug = _parse_key(key)
+        with self._lock:
+            entry = self._read_entry(KIND_LIBRARY, key)
+            if entry is None:
+                return None
+            seasons = entry.setdefault("seasons", {})
+            changed = False
+            for season, total in counts.items():
+                if total <= 0:
+                    continue
+                season_key = str(int(season))
+                bucket = seasons.setdefault(season_key, {"episode_count": 0, "downloaded": []})
+                if int(bucket.get("episode_count", 0)) != int(total):
+                    bucket["episode_count"] = int(total)
+                    changed = True
+            if changed:
+                self._write_entry(KIND_LIBRARY, entry)
+                self._update_index_row(KIND_LIBRARY, entry)
             return entry
 
     def mark_movie_downloaded(self, key: str, movie_number: int) -> dict:
@@ -484,18 +533,26 @@ class LibraryStore(metaclass=Singleton):
         downloaded = sum(len(s.get("downloaded", [])) for s in seasons.values())
         downloaded += len(movies.get("downloaded", []))
         total = sum(s.get("episode_count", 0) for s in seasons.values())
-        # Pull FSK/rating from any provider block so cards can render
-        # them without loading the full entry. First provider with a
-        # value wins.
+        # Pull FSK/rating from provider blocks so cards can render them
+        # without loading the full entry. For FSK we run a two-pass scan:
+        # first prefer values that look like a German FSK rating ("FSK 12",
+        # "12") since that's what local users expect; fall back to whatever
+        # the providers offer (TV-14, PG-13, …) so US shows still get a
+        # badge instead of nothing.
         fsk = None
         rating = None
-        for block in (entry.get("external") or {}).values():
-            if fsk is None and block.get("fsk"):
-                fsk = block["fsk"]
+        blocks = list((entry.get("external") or {}).values())
+        for block in blocks:
             if rating is None and block.get("rating"):
                 rating = block["rating"]
-            if fsk and rating:
-                break
+            value = block.get("fsk")
+            if fsk is None and value and _looks_like_fsk(value):
+                fsk = value
+        if fsk is None:
+            for block in blocks:
+                if block.get("fsk"):
+                    fsk = block["fsk"]
+                    break
         return {
             "key": entry["key"],
             "title": entry.get("title"),

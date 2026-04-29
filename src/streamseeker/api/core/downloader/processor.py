@@ -24,6 +24,15 @@ class QueueProcessor(metaclass=Singleton):
         self._ddos_counter = 0
         self._active_downloads: list[threading.Thread] = []
         self._active_lock = threading.Lock()
+        # Circuit breaker — pause the whole queue when too many cache-URL
+        # extractions fail in a short window. Symptom of the host's anti-bot
+        # tipping over; backing off for a few hours typically clears it.
+        # State is in-memory only: a daemon restart resets the breaker, which
+        # is the right semantics — restart implies the operator is on top of
+        # things again.
+        self._recent_failures: list[float] = []
+        self._paused_until: float | None = None
+        self._circuit_lock = threading.Lock()
 
     def start(self, config: dict = None) -> None:
         """Start the queue processor if not already running."""
@@ -36,6 +45,79 @@ class QueueProcessor(metaclass=Singleton):
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._process_loop, daemon=True)
         self._thread.start()
+
+    # ----- Circuit breaker ---------------------------------------------------
+
+    def _circuit_config(self) -> tuple[int, float, float]:
+        """Return (threshold, window_seconds, pause_seconds) from config with
+        sensible defaults: 5 failures within 10 minutes → pause for 4 hours.
+        """
+        threshold = int(self._config.get("circuit_failure_threshold", 5))
+        window = float(self._config.get("circuit_failure_window", 10 * 60))
+        pause = float(self._config.get("circuit_pause_seconds", 4 * 60 * 60))
+        return threshold, window, pause
+
+    def _register_failure(self) -> None:
+        """Record a failure and, if the threshold is reached, pause the queue."""
+        threshold, window, pause = self._circuit_config()
+        if threshold <= 0:
+            return  # disabled by config
+        now = time.time()
+        with self._circuit_lock:
+            self._recent_failures = [t for t in self._recent_failures if now - t <= window]
+            self._recent_failures.append(now)
+            if len(self._recent_failures) >= threshold and (self._paused_until or 0) < now:
+                self._paused_until = now + pause
+                self._recent_failures.clear()
+                hours = pause / 3600
+                logger.warning(
+                    f"Queue paused for ~{hours:.1f} h — {threshold} failures within "
+                    f"{int(window/60)} min suggest the upstream host is rate-limiting us."
+                )
+
+    def _register_success(self) -> None:
+        """A successful download clears the failure window so a healthy run
+        doesn't accumulate stale failures from hours ago."""
+        with self._circuit_lock:
+            self._recent_failures.clear()
+
+    def circuit_state(self) -> dict:
+        """Snapshot for ``/status`` so the popup can render a banner."""
+        with self._circuit_lock:
+            now = time.time()
+            paused = bool(self._paused_until and self._paused_until > now)
+            return {
+                "paused": paused,
+                "paused_until": self._paused_until if paused else None,
+                "recent_failures": len(self._recent_failures),
+            }
+
+    def resume_now(self) -> bool:
+        """Manually clear the breaker. Returns True if it was actually paused."""
+        with self._circuit_lock:
+            was_paused = bool(self._paused_until and self._paused_until > time.time())
+            self._paused_until = None
+            self._recent_failures.clear()
+        if was_paused:
+            logger.info("Queue manually resumed by user — circuit breaker cleared.")
+        return was_paused
+
+    def _wait_if_paused(self) -> None:
+        """Block until the circuit-breaker pause window has elapsed, or until
+        ``stop()`` is signalled. Polls in 5 s ticks so a manual ``resume_now``
+        or ``stop`` is honoured promptly without a busy loop."""
+        while not self._stop_event.is_set():
+            with self._circuit_lock:
+                paused_until = self._paused_until
+            if not paused_until:
+                return
+            remaining = paused_until - time.time()
+            if remaining <= 0:
+                with self._circuit_lock:
+                    self._paused_until = None
+                logger.info("Queue auto-resumed after circuit-breaker cooldown.")
+                return
+            self._stop_event.wait(min(5.0, remaining))
 
     def _recover_interrupted(self) -> None:
         """Reset 'downloading' items back to 'pending' and delete partial files."""
@@ -80,6 +162,13 @@ class QueueProcessor(metaclass=Singleton):
         items enqueued later. Use ``stop()`` to terminate cleanly.
         """
         while not self._stop_event.is_set():
+            # Honour the circuit breaker before pulling work — if upstream
+            # has been failing repeatedly, idle until the cooldown elapses
+            # (or until the operator clears it via the resume endpoint).
+            self._wait_if_paused()
+            if self._stop_event.is_set():
+                break
+
             item = self._manager.get_next_pending()
             if item is None:
                 # Queue empty — wait briefly and poll again. This keeps the
@@ -201,12 +290,15 @@ class QueueProcessor(metaclass=Singleton):
             self._manager.mark_status(file_name, "failed",
                                        last_error=str(e),
                                        attempts=item.get("attempts", 0) + 1)
+            self._register_failure()
         except ProviderError as e:
             self._manager.mark_status(file_name, "failed",
                                        last_error=str(e),
                                        attempts=item.get("attempts", 0) + 1)
+            self._register_failure()
         except Exception as e:
             logger.error(f"Unexpected error processing {file_name}: {e}")
             self._manager.mark_status(file_name, "failed",
                                        last_error=str(e),
                                        attempts=item.get("attempts", 0) + 1)
+            self._register_failure()

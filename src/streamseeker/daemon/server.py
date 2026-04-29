@@ -32,6 +32,76 @@ def _safe_enrich(key: str, kind: str) -> None:
         logger.warning(f"background enrich failed for {key} ({kind}): {exc}")
 
 
+def _ensure_library_stub_async(stream: str, slug: str, type_: str) -> None:
+    """Upsert a minimal library entry (slug-as-title placeholder) and kick
+    off TMDb/AniList enrichment in a background thread.
+
+    This is what makes a freshly-enqueued show appear in the Sammlung tab
+    immediately, with cover/description filling in a couple of seconds
+    later — instead of only after the first episode finishes downloading.
+    Non-blocking: never raises into the request handler.
+    """
+    if not stream or not slug:
+        return
+    key = f"{stream}::{slug}"
+
+    def _worker() -> None:
+        try:
+            store = LibraryStore()
+            existing = store.get(KIND_LIBRARY, key)
+            if not existing:
+                # Title left as the slug; the resolver overwrites it once
+                # TMDb/AniList have a match. ``add`` is upsert-safe.
+                store.add(KIND_LIBRARY, {
+                    "key": key,
+                    "stream": stream,
+                    "slug": slug,
+                    "title": slug.replace("-", " ").title(),
+                    "type": type_ or "staffel",
+                })
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"library stub upsert failed for {key}: {exc}")
+            return
+        _safe_enrich(key, KIND_LIBRARY)
+        _populate_season_totals(stream, slug, type_)
+
+    threading.Thread(target=_worker, name=f"ss-enqueue-stub-{slug}", daemon=True).start()
+
+
+def _populate_season_totals(stream: str, slug: str, type_: str) -> None:
+    """Ask the stream how many episodes each season has and write the totals
+    into the Library entry. Without this, ``seasons[N].episode_count`` only
+    grows to whatever has been *downloaded*, so the Sammlung-card and detail
+    overlay show "1/1" instead of "1/10". Best-effort; never raises."""
+    try:
+        if (type_ or "").lower() == "filme":
+            return
+        from streamseeker.api.handler import StreamseekerHandler
+
+        handler = StreamseekerHandler()
+        impl = handler._streams.get(stream)
+        if impl is None:
+            return
+        impl.set_config(handler.config)
+        seasons = impl.search_seasons(slug, "staffel") or []
+        counts: dict[int, int] = {}
+        for season in seasons:
+            # Season 0 on s.to is the "Filme"-section; the extension/UI
+            # doesn't surface movies through the seasons grid yet, so skip
+            # them here to keep the totals reflect only real TV seasons.
+            if int(season) == 0:
+                continue
+            try:
+                episodes = impl.search_episodes(slug, "staffel", season) or []
+            except Exception:  # noqa: BLE001 — keep going on per-season failure
+                continue
+            counts[int(season)] = len(episodes)
+        if counts:
+            LibraryStore().update_season_totals(f"{stream}::{slug}", counts)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"season totals fetch failed for {stream}::{slug}: {exc}")
+
+
 def _infer_scope(req: "QueueItemRequest") -> str:
     """Back-compat scope inference for clients that don't send ``scope``."""
     if req.type == "filme":
@@ -56,7 +126,7 @@ class FavoriteRequest(BaseModel):
 class QueueItemRequest(BaseModel):
     stream: str
     slug: str
-    scope: Optional[str] = None  # "single" | "season" | "season_from" | "from" | "all"
+    scope: Optional[str] = None  # "single" | "season" | "season_from" | "from" | "all" | "missing"
     type: str = "staffel"
     season: int = 0
     episode: int = 0
@@ -90,11 +160,20 @@ def _format_key(stream: str, slug: str) -> str:
 
 def _build_status() -> dict:
     manager = DownloadManager()
-    return {
+    payload = {
         "summary": manager.queue_summary(),
         "progress": manager.get_progress(),
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+    # Surface the queue-processor circuit breaker so the popup can render
+    # a banner ("Pausiert bis HH:MM — Anbieter zickt"). Optional in the
+    # response shape so old extensions don't trip on the extra field.
+    try:
+        from streamseeker.api.core.downloader.processor import QueueProcessor
+        payload["circuit"] = QueueProcessor().circuit_state()
+    except Exception:  # noqa: BLE001 — status must never raise
+        payload["circuit"] = {"paused": False}
+    return payload
 
 
 def _serve_asset(key: str, filename: str, kind: str = KIND_LIBRARY):
@@ -120,6 +199,20 @@ _LIBRARY_STATE_CACHE: dict[tuple[str, str], tuple[float, dict]] = {}
 _LIBRARY_STATE_TTL = 2.0  # seconds — fast enough for UI, short enough that
 #                         SSE-driven updates surface within ~2s.
 _LIBRARY_STATE_LOCK = threading.Lock()
+
+# Progress state for the "Metadaten neu laden" button in the popup.
+# Polled via GET /library/refresh-all/status; the popup uses it to drive
+# a progress bar and re-enable the button when running flips to False.
+_REFRESH_ALL_LOCK = threading.Lock()
+_REFRESH_ALL_STATE: dict = {
+    "running": False,
+    "total": 0,
+    "current": 0,
+    "success": 0,
+    "started_at": None,
+    "finished_at": None,
+    "cancel_requested": False,
+}
 
 
 def _library_state_cached(stream: str, slug: str) -> dict:
@@ -601,7 +694,11 @@ def create_app() -> FastAPI:
         scope = (req.scope or _infer_scope(req)).lower()
 
         try:
-            if req.type == "filme" or scope == "single":
+            if scope == "missing":
+                count = handler.enqueue_missing(
+                    req.stream, provider, req.slug, language, req.type,
+                )
+            elif req.type == "filme" or scope == "single":
                 count = handler.enqueue_single(
                     req.stream, provider, req.slug, language, req.type,
                     season=req.season, episode=req.episode,
@@ -626,6 +723,13 @@ def create_app() -> FastAPI:
         except Exception as exc:  # noqa: BLE001 — surface as HTTP 500-style reply
             logger.exception(f"enqueue failed for {req.stream}::{req.slug}: {exc}")
             raise HTTPException(status_code=500, detail=f"enqueue failed: {exc}") from exc
+
+        # Make the show visible in the Sammlung tab immediately, even before
+        # the first download finishes. Upsert a minimal library entry and
+        # kick off async metadata enrichment so cover/description/genres
+        # appear within a couple of seconds.
+        if count > 0:
+            _ensure_library_stub_async(req.stream, req.slug, req.type)
 
         _invalidate_library_state_cache(req.stream, req.slug)
         return {"enqueued": True, "count": count}
@@ -663,6 +767,15 @@ def create_app() -> FastAPI:
         DownloadManager()._remove_from_queue(file_name)
         _invalidate_library_state_cache()
         return {"removed": True, "file_name": file_name}
+
+    @app.post("/queue/resume")
+    def queue_resume_paused() -> dict:
+        """Manually clear a circuit-breaker pause so downloads resume now,
+        instead of waiting out the cooldown. Idempotent — no-op if the
+        breaker isn't tripped."""
+        from streamseeker.api.core.downloader.processor import QueueProcessor
+        was_paused = QueueProcessor().resume_now()
+        return {"resumed": was_paused}
 
     # -----------------------------------------------------------------
     # Updates (new seasons / episodes on tracked entries)
@@ -826,29 +939,96 @@ def create_app() -> FastAPI:
         metadata cache repopulated with translations. Runs in a background
         thread with ``delay`` seconds between entries so external APIs
         (TMDb 50 req/s, AniList 30 req/min) are never hit hard. Returns
-        immediately with the number of entries queued.
+        immediately with the number of entries queued; the popup polls
+        ``GET /library/refresh-all/status`` for the progress bar.
         """
         store = LibraryStore()
-        keys = [row.get("key") for row in store.list(KIND_LIBRARY) if row.get("key")]
+        rows = [row for row in store.list(KIND_LIBRARY) if row.get("key")]
+        keys = [row.get("key") for row in rows]
         delay_seconds = max(0.0, float(delay))
+
+        with _REFRESH_ALL_LOCK:
+            if _REFRESH_ALL_STATE.get("running"):
+                # Already in flight — surface that instead of starting a duplicate
+                return {
+                    "queued": _REFRESH_ALL_STATE.get("total", 0),
+                    "delay_seconds": delay_seconds,
+                    "already_running": True,
+                }
+            _REFRESH_ALL_STATE.update({
+                "running": True,
+                "total": len(rows),
+                "current": 0,
+                "success": 0,
+                "started_at": time.time(),
+                "finished_at": None,
+                "cancel_requested": False,
+            })
 
         def _worker() -> None:
             resolver = MetadataResolver()
             success = 0
-            for index, k in enumerate(keys):
-                try:
-                    if resolver.enrich(k, reset=reset):
-                        success += 1
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning(f"refresh-all: enrich failed for {k}: {exc}")
-                if delay_seconds and index < len(keys) - 1:
-                    time.sleep(delay_seconds)
-            logger.info(
-                f"refresh-all completed: {success}/{len(keys)} entries enriched"
-            )
+            try:
+                for index, row in enumerate(rows):
+                    with _REFRESH_ALL_LOCK:
+                        if _REFRESH_ALL_STATE.get("cancel_requested"):
+                            logger.info(
+                                f"refresh-all cancelled at {index}/{len(rows)}"
+                            )
+                            break
+                    k = row.get("key")
+                    try:
+                        if resolver.enrich(k, reset=reset):
+                            success += 1
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(f"refresh-all: enrich failed for {k}: {exc}")
+                    # Refresh real episode totals from the stream too — that's
+                    # what makes the Sammlung-card show "1/10" instead of "1/1"
+                    # for entries that were created before the auto-populate
+                    # logic existed. Movies (type=='filme') skip the scrape.
+                    stream = row.get("stream")
+                    slug = row.get("slug")
+                    row_type = row.get("type") or "staffel"
+                    if stream and slug and row_type != "filme":
+                        try:
+                            _populate_season_totals(stream, slug, row_type)
+                        except Exception as exc:  # noqa: BLE001
+                            logger.warning(f"refresh-all: totals failed for {k}: {exc}")
+                    with _REFRESH_ALL_LOCK:
+                        _REFRESH_ALL_STATE["current"] = index + 1
+                        _REFRESH_ALL_STATE["success"] = success
+                    if delay_seconds and index < len(rows) - 1:
+                        time.sleep(delay_seconds)
+                logger.info(
+                    f"refresh-all completed: {success}/{len(rows)} entries enriched"
+                )
+            finally:
+                with _REFRESH_ALL_LOCK:
+                    _REFRESH_ALL_STATE["running"] = False
+                    _REFRESH_ALL_STATE["finished_at"] = time.time()
 
         threading.Thread(target=_worker, name="ss-refresh-all", daemon=True).start()
         return {"queued": len(keys), "delay_seconds": delay_seconds}
+
+    @app.get("/library/refresh-all/status")
+    def library_refresh_all_status() -> dict:
+        """Snapshot of the current/last refresh-all progress so the popup
+        can drive a progress bar without holding an SSE connection."""
+        with _REFRESH_ALL_LOCK:
+            return dict(_REFRESH_ALL_STATE)
+
+    @app.post("/library/refresh-all/cancel")
+    def library_refresh_all_cancel() -> dict:
+        """Soft-cancel a stuck refresh-all run. Sets a flag the worker
+        checks at the top of each iteration; the active enrich call
+        finishes (we don't kill threads), then the loop exits and the
+        button becomes available again. Idempotent — calling it when
+        nothing is running is a no-op."""
+        with _REFRESH_ALL_LOCK:
+            was_running = bool(_REFRESH_ALL_STATE.get("running"))
+            if was_running:
+                _REFRESH_ALL_STATE["cancel_requested"] = True
+        return {"cancelled": was_running}
 
     @app.post("/library/{key:path}/refresh")
     def library_refresh(
@@ -872,6 +1052,17 @@ def create_app() -> FastAPI:
             year_override=year,
             reset=reset,
         )
+        # Also re-scrape the season structure so x/y on the Sammlung card
+        # and detail overlay reflect the actual episode count, not just
+        # whatever has been downloaded so far. Movies skip this step.
+        stream = entry.get("stream")
+        slug = entry.get("slug")
+        row_type = entry.get("type") or "staffel"
+        if stream and slug and row_type != "filme":
+            try:
+                _populate_season_totals(stream, slug, row_type)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(f"refresh: totals failed for {key}: {exc}")
         return {"refreshed": applied, "key": key}
 
     @app.get("/library/{key:path}")
@@ -1017,8 +1208,14 @@ def create_app() -> FastAPI:
                 if await request.is_disconnected():
                     break
                 status = _build_status()
+                # Include the circuit-breaker state in the dedup signature
+                # so a "paused"/"resumed" transition pushes immediately.
                 signature = json.dumps(
-                    {"summary": status.get("summary"), "progress": status.get("progress")},
+                    {
+                        "summary": status.get("summary"),
+                        "progress": status.get("progress"),
+                        "circuit": status.get("circuit"),
+                    },
                     sort_keys=True,
                 )
                 if signature != last_signature:
