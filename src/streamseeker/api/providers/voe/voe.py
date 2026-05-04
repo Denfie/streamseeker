@@ -3,6 +3,8 @@ import os
 import base64
 import binascii
 import json
+import threading
+import time as _time
 
 from typing import Optional, Dict, Any
 
@@ -10,7 +12,7 @@ from streamseeker.api.core.exceptions import CacheUrlError
 from streamseeker.api.core.request_handler import RequestHandler
 
 from streamseeker.api.providers.provider_base import ProviderBase
-from streamseeker.api.core.downloader.ffmpeg import DownloaderFFmpeg  
+from streamseeker.api.core.downloader.ffmpeg import DownloaderFFmpeg
 
 from streamseeker.api.core.logger import Logger
 logger = Logger().instance()
@@ -22,6 +24,19 @@ class VoeProvider(ProviderBase):
 
     # Pre-compiled junk parts for replacement
     JUNK_PARTS = ["@$", "^^", "~@", "%?", "*~", "!!", "#&"]
+
+    # Serialize the cache-URL extraction step. The daemon's QueueProcessor
+    # runs up to ``max_concurrent`` (default 5) downloads in parallel, but
+    # firing five simultaneous extraction requests against VOE / DDoS-Guard
+    # consistently trips the rate-limit and produces "Could not get cache
+    # url for VOE" failures. Once we have the cache URL, the actual ffmpeg
+    # HLS download goes to the CDN host (different domain) and parallelism
+    # there is fine — only the extraction needs to happen one-at-a-time.
+    # A small minimum spacing between extractions further reduces the chance
+    # of the anti-bot grouping us into a burst.
+    _extract_lock = threading.Lock()
+    _last_extract_at: float = 0.0
+    _MIN_EXTRACT_SPACING = 1.5  # seconds
 
     def shift_letters(self, input_str: str) -> str:
         """Apply ROT13 cipher to alphabetic characters."""
@@ -110,31 +125,38 @@ class VoeProvider(ProviderBase):
         raise CacheUrlError(f"Could not get cache url for {self.title}")
   
     def download(self, url, file_name):
-        # DDoS-Guard occasionally serves a 5-second JS challenge on the
-        # first request even with TLS impersonation enabled. Retrying with
-        # a short backoff after a fresh handshake usually clears it.
-        # Three attempts, increasing wait — the queue retries the item
-        # again later anyway, so this just covers the transient case.
-        last_error = None
-        for attempt in range(1, 4):
-            try:
-                cache_url = self.get_download_url(url)
-                break
-            except CacheUrlError as e:
-                last_error = e
-                if attempt < 3:
-                    backoff = 2 + attempt * 4  # 6s, 10s
-                    logger.warning(
-                        f"VOE attempt {attempt}/3 failed ({e}); "
-                        f"retrying in {backoff}s"
-                    )
-                    import time as _time
-                    _time.sleep(backoff)
-                    self.cache_attemps = 0
-                    continue
-        else:
-            logger.error(f"ERROR: {last_error}")
-            raise CacheUrlError(last_error)
+        # Serialize cache-URL extraction across all parallel queue workers.
+        # See class-level _extract_lock comment for the why.
+        with self._extract_lock:
+            since_last = _time.time() - VoeProvider._last_extract_at
+            if since_last < self._MIN_EXTRACT_SPACING:
+                _time.sleep(self._MIN_EXTRACT_SPACING - since_last)
+
+            # DDoS-Guard occasionally serves a 5-second JS challenge on the
+            # first request even with TLS impersonation enabled. Retrying
+            # with a short backoff after a fresh handshake usually clears it.
+            # Three attempts, increasing wait — the queue retries the item
+            # again later anyway, so this just covers the transient case.
+            last_error = None
+            for attempt in range(1, 4):
+                try:
+                    cache_url = self.get_download_url(url)
+                    break
+                except CacheUrlError as e:
+                    last_error = e
+                    if attempt < 3:
+                        backoff = 2 + attempt * 4  # 6s, 10s
+                        logger.warning(
+                            f"VOE attempt {attempt}/3 failed ({e}); "
+                            f"retrying in {backoff}s"
+                        )
+                        _time.sleep(backoff)
+                        self.cache_attemps = 0
+                        continue
+            else:
+                logger.error(f"ERROR: {last_error}")
+                raise CacheUrlError(last_error)
+            VoeProvider._last_extract_at = _time.time()
 
         os.makedirs(os.path.dirname(file_name), exist_ok=True)
         self._downloader = DownloaderFFmpeg(cache_url, file_name)

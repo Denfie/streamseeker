@@ -1,5 +1,8 @@
 import os
 import random
+import signal
+import subprocess
+import sys
 import threading
 import time
 
@@ -40,6 +43,12 @@ class QueueProcessor(metaclass=Singleton):
             self._config = config
         if self._thread and self._thread.is_alive():
             return
+        # Kill leftover ffmpeg processes from previous daemon sessions before
+        # we touch the queue. ffmpeg is its own OS process and survives the
+        # Python parent dying, so without this sweep zombies can keep writing
+        # into files the new daemon doesn't track (in the worst case into
+        # deleted-but-held-open inodes after a download-dir migration).
+        self._kill_orphan_ffmpegs()
         # Reset items stuck in "downloading" from a previous interrupted session
         self._recover_interrupted()
         self._stop_event.clear()
@@ -118,6 +127,61 @@ class QueueProcessor(metaclass=Singleton):
                 logger.info("Queue auto-resumed after circuit-breaker cooldown.")
                 return
             self._stop_event.wait(min(5.0, remaining))
+
+    # Marker baked into every ffmpeg command we spawn (see ffmpeg.py).
+    # Specific enough that we won't kill random unrelated ffmpegs.
+    _FFMPEG_SIGNATURE = "-progress pipe:1"
+
+    def _kill_orphan_ffmpegs(self) -> None:
+        """Terminate every ffmpeg process matching our spawn signature.
+
+        Called once at daemon start. At that moment the new daemon hasn't
+        spawned anything yet, so any ffmpeg with our signature is an orphan
+        from a previous session — exactly the case we want gone.
+        """
+        if sys.platform == "win32":
+            return  # best-effort platform; ps parsing not portable
+        try:
+            result = subprocess.run(
+                ["ps", "-axo", "pid=,command="],
+                capture_output=True, text=True, timeout=10,
+            )
+        except (subprocess.SubprocessError, FileNotFoundError):
+            return
+
+        victims: list[int] = []
+        for line in result.stdout.splitlines():
+            line = line.strip()
+            if not line or "ffmpeg" not in line or self._FFMPEG_SIGNATURE not in line:
+                continue
+            pid_str, _, _ = line.partition(" ")
+            try:
+                pid = int(pid_str)
+            except ValueError:
+                continue
+            if pid == os.getpid():
+                continue
+            victims.append(pid)
+
+        if not victims:
+            return
+
+        for pid in victims:
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except (ProcessLookupError, PermissionError):
+                pass
+        time.sleep(2)
+        # SIGKILL anything that ignored SIGTERM
+        for pid in victims:
+            try:
+                os.kill(pid, 0)  # probe — raises if dead
+                os.kill(pid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                pass
+        logger.warning(
+            f"Killed {len(victims)} orphan ffmpeg process(es) from a previous session: {victims}"
+        )
 
     def _recover_interrupted(self) -> None:
         """Reset 'downloading' items back to 'pending' and delete partial files."""

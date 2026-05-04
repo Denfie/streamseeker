@@ -30,6 +30,13 @@ class ProviderFactory(metaclass=Singleton):
     def get_unsupported(self) -> dict[str, dict]:
         return self._unsupported
 
+    def supported_names(self) -> list[str]:
+        """Lowercase names of every provider StreamSeeker can actually
+        download from. Used by the daemon's ``/providers`` endpoint so the
+        browser extension's Settings dropdown stays in sync with the
+        backend instead of duplicating the list."""
+        return list(self._dict.keys())
+
     def _track_unsupported(self, name: str, source_url: str = None) -> None:
         """Track an unsupported provider name with count, URLs, and dates."""
         now = datetime.now(timezone.utc).astimezone().isoformat()

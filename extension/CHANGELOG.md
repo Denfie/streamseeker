@@ -7,6 +7,25 @@ required CLI version via the `minCliVersion` key in `manifest.json`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.30.2] - 2026-05-03
+
+### Changed
+
+- "Bevorzugter Provider"-Auswahl in den Einstellungen wird jetzt
+  dynamisch vom Daemon (`GET /providers`) gefüttert statt aus einer
+  hardcoded Liste. Eine eventuell gespeicherte, mittlerweile
+  zurückgezogene Wahl bleibt als `(legacy)`-Eintrag selektierbar,
+  damit keine bestehende Konfiguration stillschweigend verloren geht.
+  Fallback auf die alte Liste, wenn der Daemon-Endpoint nicht antwortet.
+
+## [0.30.1] - 2026-04-30
+
+### Fixed
+
+- Fortschrittsbalken in den Einstellungen blieb nach einem Refresh
+  sichtbar, auch wenn nichts mehr lief — eine CSS-Spezifitätsregel hat
+  das `hidden`-Attribut überstimmt.
+
 ## [0.30.0] - 2026-04-29
 
 ### Added

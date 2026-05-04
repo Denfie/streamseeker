@@ -8,6 +8,68 @@ See [docu-intern/versioning.md](docu-intern/versioning.md) for the release proce
 
 The browser extension is released independently; see `extension/CHANGELOG.md`.
 
+## [Unreleased]
+
+## [0.5.0] - 2026-05-03
+
+### Added
+
+- **Neuer Endpoint `GET /providers`** — liefert die Liste der vom CLI
+  unterstützten Streaming-Hoster. Die Browser-Extension nutzt das,
+  damit die "Bevorzugter Provider"-Auswahl in den Einstellungen sich
+  automatisch an die Backend-Liste anpasst, ohne dass eine doppelte
+  Liste im Code gepflegt werden muss.
+
+### Changed
+
+- **Diagnose-Output bei fehlgeschlagenen ffmpeg-Downloads.** Die letzten
+  Zeilen von `stderr` werden jetzt mitprotokolliert (`daemon.err`),
+  damit man bei einem Fehlschlag sehen kann, woran es konkret lag —
+  vorher wurde der Output verworfen. Bounded auf 50 Zeilen pro
+  Versuch, damit lange Downloads keine großen Logs erzeugen.
+
+## [0.4.1] - 2026-04-30
+
+### Added
+
+- **Watchdog für die Metadaten-Aktualisierung.** Pro Eintrag gibt es jetzt
+  ein Zeitlimit (Standard 60 s, einstellbar über
+  `metadata_entry_timeout` in der `config.json`). Hängt ein Anbieter,
+  wird der Eintrag übersprungen statt den ganzen Lauf zu blockieren.
+- **Persistierter Status der Metadaten-Aktualisierung.** Der Fortschritt
+  wird auf Platte mitgeschrieben, sodass nach einem Daemon-Neustart
+  während eines laufenden Refreshs der Status sauber als
+  "abgebrochen" markiert wird statt das Popup mit einem hängenden
+  Balken zurückzulassen.
+
+### Fixed
+
+- Browser-Extension: Fortschrittsbalken in den Einstellungen blieb nach
+  einem Refresh sichtbar, auch wenn nichts mehr lief — eine
+  CSS-Spezifitätsregel hat das `hidden`-Attribut überstimmt.
+
+## [0.4.0] - 2026-04-30
+
+### Added
+
+- **Aufräumen verwaister Download-Prozesse beim Daemon-Start.** Beim
+  Start des Daemons werden Hintergrund-Downloads aus früheren Sessions,
+  die nicht in der aktuellen Queue stehen, beendet. So sammeln sich
+  keine "Zombie"-Downloads mehr an, die nach Daemon-Restart unbemerkt
+  weiterlaufen und Bandbreite/Plattenplatz belegen.
+
+### Changed
+
+- **Robustere Download-Abbruchkriterien.** Hängt eine Verbindung länger
+  als 30 s ohne Datenfluss, bricht der Download von selbst ab statt
+  unbegrenzt weiterzulaufen. Reconnects werden auf maximal 30 s
+  Wartezeit gedeckelt, sodass tote Verbindungen nicht in
+  Endlos-Schleifen festhängen.
+- Weitere Anpassungen für besseren Datenabruf bei VOE — die parallele
+  Verarbeitung der Queue (`max_concurrent`) wird beim Anbieter-seitigen
+  Schritt wieder serialisiert, sodass parallele Downloads den Anbieter
+  nicht überfordern. Der eigentliche Download bleibt parallel.
+
 ## [0.3.0] - 2026-04-29
 
 ### Added

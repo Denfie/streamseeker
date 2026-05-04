@@ -1215,7 +1215,11 @@
 
   // ----- Settings tab ----------------------------------------------
 
-  const PROVIDER_CHOICES = ["voe", "vidoza", "streamtape", "doodstream", "speedfiles", "filemoon", "vidmoly"];
+  // Fallback list — mirrors the providers shipped with the CLI today.
+  // The daemon's GET /providers is the source of truth; this is only used
+  // if the endpoint is unreachable (older daemon, transient error) so the
+  // dropdown always has *something* sensible.
+  const PROVIDER_CHOICES_FALLBACK = ["voe", "vidoza", "streamtape", "doodstream", "speedfiles", "filemoon", "vidmoly"];
 
   async function renderSettings() {
     const host = document.querySelector("#ss-settings");
@@ -1227,15 +1231,27 @@
       host.innerHTML = `<div class="empty">${window.ssI18n.t("settings.load_failed", { message: err.message })}</div>`;
       return;
     }
+    // Pull supported provider names from the daemon so the dropdown stays
+    // in sync with the backend. Missing endpoint or network blip → fall
+    // back to the hardcoded list rather than breaking the form.
+    let providerChoices = PROVIDER_CHOICES_FALLBACK;
+    try {
+      const resp = await api.providers();
+      if (resp && Array.isArray(resp.supported) && resp.supported.length) {
+        providerChoices = resp.supported;
+      }
+    } catch (_) { /* ignore — fallback already set */ }
     host.innerHTML = "";
-    host.appendChild(buildSettingsForm(data));
+    host.appendChild(buildSettingsForm(data, providerChoices));
   }
 
-  function buildSettingsForm(data) {
+  function buildSettingsForm(data, providerChoices) {
     const wrap = document.createElement("div");
     wrap.className = "settings";
 
     const t = window.ssI18n.t;
+    const providers = providerChoices && providerChoices.length
+      ? providerChoices : PROVIDER_CHOICES_FALLBACK;
 
     // --- Section: Daemon-Info (read-only) ---
     const info = document.createElement("section");
@@ -1264,9 +1280,19 @@
     const providerLabel = labeledField(t("settings.label.preferred_provider"), "preferred_provider");
     const providerSelect = document.createElement("select");
     providerSelect.id = "settings-preferred-provider";
-    PROVIDER_CHOICES.forEach((p) => {
+    // If the user has a saved preferred_provider that's no longer
+    // supported (provider was retired in the backend), keep it in the
+    // dropdown as a "(legacy)" option so it stays selectable until they
+    // pick something else — losing the saved choice silently would be
+    // worse than showing one stale entry.
+    const optionList = providers.slice();
+    if (data.config.preferred_provider && !optionList.includes(data.config.preferred_provider)) {
+      optionList.push(data.config.preferred_provider);
+    }
+    optionList.forEach((p) => {
       const o = document.createElement("option");
-      o.value = p; o.textContent = p;
+      o.value = p;
+      o.textContent = providers.includes(p) ? p : `${p} (legacy)`;
       if (data.config.preferred_provider === p) o.selected = true;
       providerSelect.appendChild(o);
     });

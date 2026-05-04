@@ -45,6 +45,7 @@
 
     version: () => request("GET", "/version"),
     status: () => request("GET", "/status"),
+    providers: () => request("GET", "/providers"),
 
     queueList: () => request("GET", "/queue"),
     queueAdd: (payload) => request("POST", "/queue", payload),

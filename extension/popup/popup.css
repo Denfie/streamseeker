@@ -212,6 +212,10 @@ header .version {
   gap: 10px;
   margin-top: 8px;
 }
+/* `display: flex` above beats the user-agent `[hidden] { display: none }`
+   rule on specificity, so the wrap stayed visible even when JS set
+   `hidden=true`. Make the toggle work as intended. */
+.settings__progress[hidden] { display: none; }
 
 .settings__progress-bar {
   flex: 1;

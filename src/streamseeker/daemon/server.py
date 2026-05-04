@@ -212,7 +212,52 @@ _REFRESH_ALL_STATE: dict = {
     "started_at": None,
     "finished_at": None,
     "cancel_requested": False,
+    "error": None,
 }
+
+
+def _refresh_state_path():
+    """Where the refresh-all snapshot is mirrored to disk so a daemon
+    restart while a refresh is mid-flight doesn't leave the popup in
+    a permanently-stuck state."""
+    return paths.logs_dir() / "refresh_all_state.json"
+
+
+def _persist_refresh_state_locked() -> None:
+    """Write a snapshot of ``_REFRESH_ALL_STATE`` to disk. MUST be called
+    while holding ``_REFRESH_ALL_LOCK``. Failures are swallowed: the disk
+    mirror is a hint for restart recovery, not authoritative state."""
+    try:
+        path = _refresh_state_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(dict(_REFRESH_ALL_STATE)))
+    except OSError:
+        pass
+
+
+def _recover_refresh_state_on_startup() -> None:
+    """If the on-disk snapshot says a refresh was running when the daemon
+    last died, flip it to a clean ``running=false`` with an error tag so
+    the popup can render "interrupted" instead of polling a stuck bar
+    forever."""
+    path = _refresh_state_path()
+    if not path.is_file():
+        return
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return
+    if not data.get("running"):
+        return
+    with _REFRESH_ALL_LOCK:
+        _REFRESH_ALL_STATE.update({
+            "running": False,
+            "finished_at": time.time(),
+            "cancel_requested": False,
+            "error": "interrupted_by_restart",
+        })
+        _persist_refresh_state_locked()
+    logger.warning("refresh-all snapshot showed running=true at startup — marked as interrupted")
 
 
 def _library_state_cached(stream: str, slug: str) -> dict:
@@ -415,6 +460,14 @@ def create_app() -> FastAPI:
             logger.warning(f"favorites migration failed: {exc}")
 
     @app.on_event("startup")
+    def _recover_refresh_state() -> None:
+        # Reconcile on-disk refresh-all snapshot — see _recover_refresh_state_on_startup.
+        try:
+            _recover_refresh_state_on_startup()
+        except Exception as exc:  # noqa: BLE001 — startup must not fail
+            logger.warning(f"refresh-all state recovery failed: {exc}")
+
+    @app.on_event("startup")
     def _start_queue_processor() -> None:
         from streamseeker.api.core.downloader.processor import QueueProcessor
         from streamseeker.api.handler import StreamseekerHandler
@@ -492,6 +545,15 @@ def create_app() -> FastAPI:
         # auto-synced newer copy is on disk and trigger chrome.runtime.reload().
         from streamseeker.distribution import installed_extension_version
         return {"version": installed_extension_version()}
+
+    @app.get("/providers")
+    def providers() -> dict:
+        """List the streaming-host extractors the CLI actually supports.
+        The browser extension reads this to populate the "Preferred
+        provider" dropdown so the list never drifts from the backend.
+        Returns lowercase names (the keys we use everywhere internally)."""
+        from streamseeker.api.providers.provider_factory import ProviderFactory
+        return {"supported": sorted(ProviderFactory().supported_names())}
 
     @app.get("/health")
     def health() -> dict:
@@ -963,7 +1025,41 @@ def create_app() -> FastAPI:
                 "started_at": time.time(),
                 "finished_at": None,
                 "cancel_requested": False,
+                "error": None,
             })
+            _persist_refresh_state_locked()
+
+        # Per-entry timeout. Generous default: TMDb + AniList + Jikan +
+        # a stream-scrape can legitimately take up to ~30 s in series; cap
+        # at 60 s so a single hung HTTP request can't freeze the whole run.
+        # Configurable via ``metadata_entry_timeout`` in config.json.
+        from streamseeker.api.handler import StreamseekerHandler
+        try:
+            entry_timeout = float(
+                StreamseekerHandler().config.get("metadata_entry_timeout", 60)
+            )
+        except Exception:  # noqa: BLE001
+            entry_timeout = 60.0
+
+        def _enrich_and_populate(resolver: MetadataResolver, row: dict) -> bool:
+            """Run enrich + season-totals for one row. Per-call exceptions are
+            caught and logged; the boolean reflects whether enrich succeeded."""
+            k = row.get("key")
+            ok = False
+            try:
+                if resolver.enrich(k, reset=reset):
+                    ok = True
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(f"refresh-all: enrich failed for {k}: {exc}")
+            stream = row.get("stream")
+            slug = row.get("slug")
+            row_type = row.get("type") or "staffel"
+            if stream and slug and row_type != "filme":
+                try:
+                    _populate_season_totals(stream, slug, row_type)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(f"refresh-all: totals failed for {k}: {exc}")
+            return ok
 
         def _worker() -> None:
             resolver = MetadataResolver()
@@ -977,26 +1073,30 @@ def create_app() -> FastAPI:
                             )
                             break
                     k = row.get("key")
-                    try:
-                        if resolver.enrich(k, reset=reset):
-                            success += 1
-                    except Exception as exc:  # noqa: BLE001
-                        logger.warning(f"refresh-all: enrich failed for {k}: {exc}")
-                    # Refresh real episode totals from the stream too — that's
-                    # what makes the Sammlung-card show "1/10" instead of "1/1"
-                    # for entries that were created before the auto-populate
-                    # logic existed. Movies (type=='filme') skip the scrape.
-                    stream = row.get("stream")
-                    slug = row.get("slug")
-                    row_type = row.get("type") or "staffel"
-                    if stream and slug and row_type != "filme":
-                        try:
-                            _populate_season_totals(stream, slug, row_type)
-                        except Exception as exc:  # noqa: BLE001
-                            logger.warning(f"refresh-all: totals failed for {k}: {exc}")
+                    # Per-entry watchdog — Python can't kill a thread, so we
+                    # let it run as a daemon thread and just stop waiting on
+                    # it. The orphan dies with the daemon process; in the
+                    # meantime the worker moves on instead of freezing the
+                    # whole refresh on one stuck HTTP call.
+                    result = {"ok": False}
+                    def _do() -> None:
+                        result["ok"] = _enrich_and_populate(resolver, row)
+                    sub = threading.Thread(
+                        target=_do, name=f"ss-refresh-entry-{index}", daemon=True,
+                    )
+                    sub.start()
+                    sub.join(timeout=entry_timeout)
+                    if sub.is_alive():
+                        logger.warning(
+                            f"refresh-all: entry {k} exceeded {entry_timeout:.0f}s timeout — "
+                            f"abandoning thread, moving on"
+                        )
+                    elif result["ok"]:
+                        success += 1
                     with _REFRESH_ALL_LOCK:
                         _REFRESH_ALL_STATE["current"] = index + 1
                         _REFRESH_ALL_STATE["success"] = success
+                        _persist_refresh_state_locked()
                     if delay_seconds and index < len(rows) - 1:
                         time.sleep(delay_seconds)
                 logger.info(
@@ -1006,6 +1106,7 @@ def create_app() -> FastAPI:
                 with _REFRESH_ALL_LOCK:
                     _REFRESH_ALL_STATE["running"] = False
                     _REFRESH_ALL_STATE["finished_at"] = time.time()
+                    _persist_refresh_state_locked()
 
         threading.Thread(target=_worker, name="ss-refresh-all", daemon=True).start()
         return {"queued": len(keys), "delay_seconds": delay_seconds}
@@ -1028,6 +1129,7 @@ def create_app() -> FastAPI:
             was_running = bool(_REFRESH_ALL_STATE.get("running"))
             if was_running:
                 _REFRESH_ALL_STATE["cancel_requested"] = True
+                _persist_refresh_state_locked()
         return {"cancelled": was_running}
 
     @app.post("/library/{key:path}/refresh")

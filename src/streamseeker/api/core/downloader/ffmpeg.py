@@ -2,6 +2,7 @@ import os
 import re
 import subprocess
 import time
+from collections import deque
 from threading import Thread
 
 from tqdm.auto import tqdm
@@ -88,8 +89,43 @@ class DownloaderFFmpeg:
     def _attempt_download(self, ffmpeg_path, hls_url, file_name, display_name, pos) -> bool:
         duration = self._probe_duration(hls_url)
 
-        ffmpeg_cmd = [ffmpeg_path, '-i', hls_url, '-c', 'copy', '-y', file_name, '-progress', 'pipe:1', '-nostats']
-        process = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+        # Input-side network safety net so a single ffmpeg can't run forever
+        # if a CDN goes silent or the signed URL expires:
+        #   -rw_timeout: bail out if no bytes flow on the socket for 30s
+        #     (microseconds — 30_000_000 == 30 s).
+        #   -reconnect / -reconnect_streamed / -reconnect_on_http_error: resume
+        #     after transient drops on HTTPS/HLS instead of dying immediately.
+        #   -reconnect_delay_max 30: cap reconnect backoff so we don't sit
+        #     in an exponential-wait loop on a permanently-dead host.
+        # These are input options and MUST appear before -i.
+        ffmpeg_cmd = [
+            ffmpeg_path,
+            '-rw_timeout', '30000000',
+            '-reconnect', '1',
+            '-reconnect_streamed', '1',
+            '-reconnect_on_http_error', '4xx,5xx',
+            '-reconnect_delay_max', '30',
+            '-i', hls_url,
+            '-c', 'copy', '-y', file_name,
+            '-progress', 'pipe:1', '-nostats',
+        ]
+        process = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+        # Capture the last ~50 stderr lines into a bounded ring so we can
+        # surface the real reason for a non-zero exit (HTTP 404 on a segment,
+        # malformed TS, demuxer error, …) instead of being blind. The reader
+        # runs in its own daemon thread so the OS pipe never fills up and
+        # blocks ffmpeg's writes. Without `-nostats` ffmpeg would flood
+        # stderr with progress; we already pass it, so the volume is low.
+        stderr_tail: deque[str] = deque(maxlen=50)
+        def _drain_stderr() -> None:
+            try:
+                for line in process.stderr:  # type: ignore[union-attr]
+                    stderr_tail.append(line.rstrip())
+            except Exception:  # noqa: BLE001 — never let logging break a download
+                pass
+        stderr_thread = Thread(target=_drain_stderr, daemon=True)
+        stderr_thread.start()
 
         from streamseeker.api.core.downloader.manager import _devnull
         pbar = tqdm(
@@ -117,6 +153,17 @@ class DownloaderFFmpeg:
         process.wait()
         self._manager.unregister_bar(display_name)
         pbar.close()
+        # Let the stderr drainer flush whatever's still in the pipe before
+        # we either log it (failure) or discard it (success). 2 s is plenty:
+        # ffmpeg has already exited, the kernel has the bytes ready.
+        stderr_thread.join(timeout=2)
+
+        if process.returncode != 0 and stderr_tail:
+            tail = "\n".join(stderr_tail)
+            logger.warning(
+                f"ffmpeg exit={process.returncode} for {display_name}; "
+                f"last stderr lines:\n{tail}"
+            )
 
         return process.returncode == 0
 

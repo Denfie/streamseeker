@@ -1,6 +1,6 @@
 [project]
 name = "streamseeker"
-version = "0.3.0"
+version = "0.5.0"
 description = "Track your favourite series, animes and movies across streaming sites and maintain a personal collection."
 readme = "README.md"
 license = { text = "MIT" }
