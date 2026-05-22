@@ -320,3 +320,104 @@ def test_cors_rejects_arbitrary_origin(client: TestClient) -> None:
     assert response.status_code == 200
     # Middleware simply omits the header for disallowed origins → browser blocks.
     assert response.headers.get("access-control-allow-origin") is None
+
+
+# --- /series/{stream}/{slug}/structure language lookup ----------------
+#
+# Regression for the case where a series gains a German dub from a later
+# season onward (Ascendance of a Bookworm: S1/S2 only have subtitles,
+# S3E4 has a real "Deutsch" track). The old structure endpoint hard-coded
+# (S1, E1) for the language lookup and the modal therefore hid the dub.
+
+
+def _patch_handler(monkeypatch: pytest.MonkeyPatch, details_by_episode: dict) -> dict:
+    """Replace StreamseekerHandler so the structure endpoint sees a known
+    per-episode language map. ``details_by_episode`` is keyed by
+    ``(season, episode)`` and returns what ``search_details`` would.
+
+    Records every (season, episode) the endpoint asked about under
+    ``calls`` so the test can assert the hint actually propagated."""
+    calls: list[tuple[int, int]] = []
+
+    class _FakeHandler:
+        def search(self, _stream, _slug):
+            return {"types": ["staffel"], "series": [1, 2, 3], "movies": []}
+
+        def search_seasons(self, _stream, _slug, _type):
+            return [1, 2, 3]
+
+        def search_details(self, _stream, _slug, _type, season, episode):
+            calls.append((season, episode))
+            return details_by_episode.get(
+                (season, episode), {"languages": {}, "providers": {}}
+            )
+
+    monkeypatch.setattr(
+        "streamseeker.api.handler.StreamseekerHandler", lambda: _FakeHandler()
+    )
+    return {"calls": calls}
+
+
+def test_structure_uses_episode_hint_for_language_lookup(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state = _patch_handler(monkeypatch, {
+        (1, 1): {
+            "languages": {"japanese-german": {"key": "3", "title": "mit Untertitel Deutsch"}},
+            "providers": {},
+        },
+        (3, 4): {
+            "languages": {"german": {"key": "1", "title": "Deutsch"}},
+            "providers": {},
+        },
+    })
+    response = client.get(
+        "/series/aniworldto/ascendance-of-a-bookworm/structure"
+        "?season=3&episode=4"
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert "german" in body["languages"]
+    assert body["languages"]["german"]["title"] == "Deutsch"
+    # The endpoint must have asked for (3, 4), not the (1, 1) default.
+    assert (3, 4) in state["calls"]
+
+
+def test_structure_falls_back_to_default_when_no_hint(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state = _patch_handler(monkeypatch, {
+        (1, 1): {
+            "languages": {"japanese-german": {"key": "3", "title": "mit Untertitel Deutsch"}},
+            "providers": {},
+        },
+    })
+    response = client.get("/series/aniworldto/ascendance-of-a-bookworm/structure")
+    assert response.status_code == 200
+    body = response.json()
+    assert "japanese-german" in body["languages"]
+    assert state["calls"] == [(1, 1)]
+
+
+def test_structure_falls_back_when_hinted_episode_has_no_languages(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If the hinted episode's language map is empty (parser miss), the
+    endpoint must retry with (default_season, 1) so the modal still has
+    something to render."""
+    state = _patch_handler(monkeypatch, {
+        (1, 1): {
+            "languages": {"german": {"key": "1", "title": "Deutsch"}},
+            "providers": {},
+        },
+        (3, 99): {"languages": {}, "providers": {}},
+    })
+    response = client.get(
+        "/series/aniworldto/ascendance-of-a-bookworm/structure"
+        "?season=3&episode=99"
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert "german" in body["languages"]
+    # First call uses the hint, second call is the (S1, E1) fallback.
+    assert state["calls"] == [(3, 99), (1, 1)]

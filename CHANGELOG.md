@@ -10,6 +10,48 @@ The browser extension is released independently; see `extension/CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Selbstheilung der Download-Queue.** Wenn der Worker-Thread aus
+  irgendeinem Grund stoppt (sauberes Beenden, unerwarteter Fehler im
+  Loop), während der Daemon selbst noch läuft, wurde die Queue
+  eingefroren: Einträge im Status `downloading` blieben dauerhaft
+  hängen, weil die Recovery-Logik nur beim Start des Workers lief.
+  Der eingebaute Watchdog erkennt das jetzt selbst und startet den
+  Worker neu, sodass die wartenden Downloads ohne manuellen Eingriff
+  weiterlaufen. Zusätzlich überlebt der Worker jetzt Einzelfehler in
+  einer Iteration, statt komplett abzustürzen.
+- **Verklemmter `downloading`-Status wird automatisch aufgeräumt.**
+  Beendete sich der innere Downloader-Thread, ohne Erfolg oder Fehler
+  zurückzumelden (z.B. nach hartem Abbruch oder Provider-Crash),
+  blieb der Queue-Eintrag dauerhaft auf `downloading`, ohne dass je
+  ein Prozess lief. Der Worker prüft das jetzt am Ende jeder Item-
+  Verarbeitung und flippt den Status auf `failed`, damit der nächste
+  Lauf den Eintrag normal als Retry behandeln kann.
+- **Watchdog kann sich nicht mehr stumm verabschieden.** Eine
+  unerwartete Exception im Watchdog-Tick beendete bisher den Thread
+  ohne Log-Spur, danach lief der Daemon ohne Selbstheilung weiter.
+  Die Schleife ist jetzt gegen `BaseException` abgesichert und gibt
+  alle ~10 Minuten eine Heartbeat-Zeile aus, sodass im Log direkt
+  sichtbar ist, ob der Watchdog noch läuft.
+- **Sprachen-Lookup im Modal nutzt die aktuelle Episode.** `GET
+  /series/:stream/:slug/structure` akzeptiert jetzt optionale
+  `season`- und `episode`-Query-Parameter. Ohne diese Hinweise fragte
+  der Endpoint immer Staffel 1 Episode 1 ab, sodass Serien, die erst
+  in späteren Staffeln eine deutsche Synchro bekommen, im
+  Auswahl-Dialog der Browser-Extension nur die Untertitel-Spuren
+  zeigten. Mit Hinweis wird die passende Episode angefragt, mit Fall-
+  Back auf die Default-Episode falls dort kein Sprachmapping gefunden
+  wird.
+- **Daemon-Log wird wieder beschrieben.** Unter dem macOS-LaunchAgent
+  war der `stdout`-Strom des Daemons puffer-bedingt mehrere Tage
+  stehen geblieben, sodass `daemon.log` keine aktuelle Diagnose mehr
+  enthielt. Der LaunchAgent setzt jetzt `PYTHONUNBUFFERED=1`, damit
+  jede Log-Zeile sofort sichtbar ist. Außerdem wird ein expliziter
+  `PATH` mit `/opt/homebrew/bin` gesetzt, damit `ffmpeg` aus einer
+  Homebrew-Installation auch dann gefunden wird, wenn der LaunchAgent
+  nicht die interaktive Shell-`PATH` erbt.
+
 ## [0.5.0] - 2026-05-03
 
 ### Added

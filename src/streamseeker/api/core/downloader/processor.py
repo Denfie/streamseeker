@@ -224,68 +224,104 @@ class QueueProcessor(metaclass=Singleton):
 
         Idles (doesn't exit) when the queue drains so the daemon can pick up
         items enqueued later. Use ``stop()`` to terminate cleanly.
+
+        Each iteration is wrapped in a guard so a single bad item or a transient
+        filesystem hiccup can't tear down the whole worker thread. If the loop
+        died, ``_recover_interrupted`` would only run on the next manual restart
+        and any in-flight items would stay flagged ``downloading`` forever.
         """
+        exit_reason = "stop_event_set"
         while not self._stop_event.is_set():
-            # Honour the circuit breaker before pulling work — if upstream
-            # has been failing repeatedly, idle until the cooldown elapses
-            # (or until the operator clears it via the resume endpoint).
-            self._wait_if_paused()
-            if self._stop_event.is_set():
-                break
-
-            item = self._manager.get_next_pending()
-            if item is None:
-                # Queue empty — wait briefly and poll again. This keeps the
-                # thread alive for items added to the queue after the first
-                # drain (e.g. via the browser extension's overlay).
+            try:
+                self._run_iteration()
+            except BaseException as exc:  # noqa: BLE001 (keep worker alive)
+                # BaseException because SystemExit / KeyboardInterrupt inside
+                # a worker thread on macOS can otherwise tear the loop down
+                # silently, leaving the queue stuck while the daemon stays
+                # alive. We've seen exactly that failure mode: server kept
+                # serving /health but no items moved for days.
+                logger.exception(
+                    f"queue processor: unexpected error in iteration, continuing: {exc}"
+                )
                 if self._stop_event.wait(2.0):
+                    exit_reason = "stop_event_set_after_error"
                     break
-                continue
-
-            # Wait for a free slot
-            self._wait_for_slot()
-            if self._stop_event.is_set():
-                break
-
-            # Start download in its own thread
-            worker = threading.Thread(
-                target=self._process_item, args=(item,), daemon=True
-            )
-            worker.start()
-            with self._active_lock:
-                self._active_downloads.append(worker)
-
-            # DDOS timing: after N starts, wait before starting next
-            self._ddos_counter += 1
-            ddos_limit = self._config.get("ddos_limit", 3)
-            ddos_timer = self._config.get("ddos_timer", 90)
-            if self._ddos_counter >= ddos_limit:
-                logger.info(f"DDOS protection: waiting {ddos_timer}s before next batch")
-                for _ in range(ddos_timer):
-                    if self._stop_event.is_set():
-                        return
-                    time.sleep(1)
-                self._ddos_counter = 0
-            else:
-                # Random delay between download starts
-                delay_min = self._config.get("start_delay_min", 5)
-                delay_max = self._config.get("start_delay_max", 25)
-                delay = random.uniform(delay_min, delay_max)
-                from streamseeker.i18n import t
-                logger.debug(t("queue.next_in", seconds=delay))
-                for _ in range(int(delay)):
-                    if self._stop_event.is_set():
-                        return
-                    time.sleep(1)
 
         # Wait for all remaining downloads to finish
         for t in list(self._active_downloads):
             t.join(timeout=5)
 
-        logger.info("Queue processor finished")
+        # Surface the reason so an operator can tell whether the exit was
+        # intentional (uvicorn shutdown -> _stop_event.set()) or a leak.
+        # The watchdog re-starts us in either case, but the log line is the
+        # only breadcrumb we have when debugging after the fact.
+        logger.info(f"Queue processor finished (reason={exit_reason})")
+
+    def _run_iteration(self) -> None:
+        """One pass of the main loop. Extracted so ``_process_loop`` can guard
+        every pass against an uncaught exception."""
+        # Honour the circuit breaker before pulling work — if upstream
+        # has been failing repeatedly, idle until the cooldown elapses
+        # (or until the operator clears it via the resume endpoint).
+        self._wait_if_paused()
+        if self._stop_event.is_set():
+            return
+
+        item = self._manager.get_next_pending()
+        if item is None:
+            # Queue empty — wait briefly and poll again. This keeps the
+            # thread alive for items added to the queue after the first
+            # drain (e.g. via the browser extension's overlay).
+            self._stop_event.wait(2.0)
+            return
+
+        # Wait for a free slot
+        self._wait_for_slot()
+        if self._stop_event.is_set():
+            return
+
+        # Start download in its own thread
+        worker = threading.Thread(
+            target=self._process_item, args=(item,), daemon=True
+        )
+        worker.start()
+        with self._active_lock:
+            self._active_downloads.append(worker)
+
+        # DDOS timing: after N starts, wait before starting next
+        self._ddos_counter += 1
+        ddos_limit = self._config.get("ddos_limit", 3)
+        ddos_timer = self._config.get("ddos_timer", 90)
+        if self._ddos_counter >= ddos_limit:
+            logger.info(f"DDOS protection: waiting {ddos_timer}s before next batch")
+            for _ in range(ddos_timer):
+                if self._stop_event.is_set():
+                    return
+                time.sleep(1)
+            self._ddos_counter = 0
+        else:
+            # Random delay between download starts
+            delay_min = self._config.get("start_delay_min", 5)
+            delay_max = self._config.get("start_delay_max", 25)
+            delay = random.uniform(delay_min, delay_max)
+            from streamseeker.i18n import t
+            logger.debug(t("queue.next_in", seconds=delay))
+            for _ in range(int(delay)):
+                if self._stop_event.is_set():
+                    return
+                time.sleep(1)
 
     def _process_item(self, item: dict) -> None:
-        """Process a single queue item. Runs in its own thread."""
+        """Process a single queue item. Runs in its own thread.
+
+        Wrapped in a try/finally so the queue item's status never gets stuck
+        at ``downloading`` when the wrapper thread dies unexpectedly or the
+        inner downloader exits without calling ``report_success`` /
+        ``mark_status``. Without the finally we'd see items pile up with
+        status=downloading even though no thread is actually running them,
+        and they'd never get retried because ``_recover_interrupted`` only
+        runs at processor start.
+        """
         file_name = item.get("file_name", "")
         stream_name = item.get("stream_name", "")
         name = item.get("name", "")
@@ -309,6 +345,40 @@ class QueueProcessor(metaclass=Singleton):
 
         # Mark as downloading
         self._manager.mark_status(file_name, "downloading")
+
+        try:
+            self._do_process_item(item, file_name, stream_name, name,
+                                  language, preferred_provider, type_,
+                                  season, episode)
+        finally:
+            # Safety net: if the item is still flagged ``downloading`` at this
+            # point, the inner downloader thread exited without reporting
+            # status (e.g. it raised an exception we didn't catch, or the
+            # underlying ffmpeg/provider stack returned without signalling
+            # back). Flip it to ``failed`` so the next iteration can retry
+            # it; otherwise it would sit there forever and the queue would
+            # appear "stuck" with downloading>0 in the file but nothing
+            # actually running.
+            try:
+                current = self._manager._find_in_queue(file_name)
+                if current and current.get("status") == "downloading":
+                    self._manager.mark_status(
+                        file_name, "failed",
+                        last_error="downloader exited without reporting status",
+                        attempts=current.get("attempts", 0) + 1,
+                    )
+                    logger.warning(
+                        f"queue processor: cleared leaked 'downloading' status for "
+                        f"{os.path.basename(file_name)} -> failed"
+                    )
+            except Exception as exc:  # noqa: BLE001 - finally must not raise
+                logger.warning(f"queue processor: status-leak cleanup failed: {exc}")
+
+    def _do_process_item(self, item: dict, file_name: str, stream_name: str,
+                         name: str, language: str, preferred_provider: str,
+                         type_: str, season: int, episode: int) -> None:
+        """Actual download work. Extracted so ``_process_item`` can wrap it
+        in a finally that guarantees no item stays stuck at ``downloading``."""
 
         # Check if already downloaded
         if self._helper.is_downloaded(file_name):

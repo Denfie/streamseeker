@@ -275,3 +275,33 @@ def test_stop_prevents_new_iterations(processor, mock_manager):
 
     # The stop event must be set
     assert processor._stop_event.is_set()
+
+
+def test_process_loop_survives_uncaught_iteration_exception(processor, mock_manager):
+    """A transient error inside one iteration must not tear down the worker
+    thread. The downloads queue would silently freeze if it did, because
+    _recover_interrupted only runs on the next manual processor.start().
+    """
+    calls = {"n": 0}
+
+    def flaky_get_next():
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("simulated transient failure")
+        return None  # second call: queue empty, loop continues idling
+
+    mock_manager.get_next_pending.side_effect = flaky_get_next
+    processor._config = {"start_delay_min": 0, "start_delay_max": 0, "ddos_limit": 999}
+
+    processor.start()
+    # After an exception the loop throttles via _stop_event.wait(2.0) before
+    # iterating again, wait past that backoff before asserting recovery.
+    deadline = time.time() + 3.5
+    while time.time() < deadline and calls["n"] < 2:
+        time.sleep(0.05)
+    assert processor.is_running(), "worker thread must survive an iteration error"
+    assert calls["n"] >= 2, "loop must keep iterating after the failure"
+
+    processor.stop()
+    if processor._thread:
+        processor._thread.join(timeout=3)

@@ -49,8 +49,21 @@
 
     queueList: () => request("GET", "/queue"),
     queueAdd: (payload) => request("POST", "/queue", payload),
-    seriesStructure: (stream, slug) =>
-      request("GET", `/series/${encodeURIComponent(stream)}/${encodeURIComponent(slug)}/structure`),
+    seriesStructure: (stream, slug, season = 0, episode = 0) => {
+      // season/episode are hints from the page the user is on. The daemon
+      // uses them to pick the right episode for the language lookup —
+      // without them, the modal can miss a dub that only exists from a
+      // later season onward (e.g. aniworld titles where S3+ adds Deutsch
+      // while S1 is subtitles-only).
+      const qs = [];
+      if (season > 0) qs.push(`season=${encodeURIComponent(season)}`);
+      if (episode > 0) qs.push(`episode=${encodeURIComponent(episode)}`);
+      const suffix = qs.length ? `?${qs.join("&")}` : "";
+      return request(
+        "GET",
+        `/series/${encodeURIComponent(stream)}/${encodeURIComponent(slug)}/structure${suffix}`,
+      );
+    },
     seriesEpisodes: (stream, slug, season, type = "staffel") =>
       request("GET", `/series/${encodeURIComponent(stream)}/${encodeURIComponent(slug)}/episodes?season=${season}&type=${encodeURIComponent(type)}`),
     queuePause: (fileName) => request("POST", `/queue/${encodeURI(fileName)}/pause`),

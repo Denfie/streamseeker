@@ -142,3 +142,101 @@ def test_watchdog_can_be_stopped_cleanly() -> None:
     wd.stop()
     # After stop the thread should be gone or finished.
     assert wd._thread is None
+
+
+# --- processor self-heal -----------------------------------------------
+
+
+def _seed_queue(tmp_path: Path, items: list[dict]) -> None:
+    """Write a minimal queue file under STREAMSEEKER_HOME so DownloadManager
+    sees the items we want."""
+    import json
+
+    from streamseeker import paths
+
+    queue_file = paths.queue_file()
+    queue_file.parent.mkdir(parents=True, exist_ok=True)
+    queue_file.write_text(json.dumps(items))
+
+
+def test_watchdog_heal_restarts_processor_when_pending_items_exist(
+    tmp_path: Path,
+) -> None:
+    from streamseeker.api.core.downloader.processor import QueueProcessor
+
+    _seed_queue(
+        tmp_path,
+        [{"file_name": "a.mp4", "status": "pending"}],
+    )
+    Singleton._instances.pop(QueueProcessor, None)
+
+    wd = Watchdog(host="127.0.0.1", port=8765, startup_grace=0.0)
+    with patch.object(QueueProcessor, "is_running", return_value=False), \
+         patch.object(QueueProcessor, "start") as mock_start:
+        wd._heal_processor_if_needed()
+        mock_start.assert_called_once()
+
+    Singleton._instances.pop(QueueProcessor, None)
+
+
+def test_watchdog_heal_restarts_processor_for_zombie_downloads(
+    tmp_path: Path,
+) -> None:
+    """The exact failure mode we saw in the wild: items stuck at 'downloading'
+    because the previous run died mid-flight. Only ``processor.start()`` resets
+    them via _recover_interrupted, so the watchdog must trigger that path."""
+    from streamseeker.api.core.downloader.processor import QueueProcessor
+
+    _seed_queue(
+        tmp_path,
+        [{"file_name": "zombie.mp4", "status": "downloading"}],
+    )
+    Singleton._instances.pop(QueueProcessor, None)
+
+    wd = Watchdog(host="127.0.0.1", port=8765, startup_grace=0.0)
+    with patch.object(QueueProcessor, "is_running", return_value=False), \
+         patch.object(QueueProcessor, "start") as mock_start:
+        wd._heal_processor_if_needed()
+        mock_start.assert_called_once()
+
+    Singleton._instances.pop(QueueProcessor, None)
+
+
+def test_watchdog_heal_skips_when_queue_empty(tmp_path: Path) -> None:
+    from streamseeker.api.core.downloader.processor import QueueProcessor
+
+    _seed_queue(tmp_path, [{"file_name": "done.mp4", "status": "success"}])
+    Singleton._instances.pop(QueueProcessor, None)
+
+    wd = Watchdog(host="127.0.0.1", port=8765, startup_grace=0.0)
+    with patch.object(QueueProcessor, "is_running", return_value=False), \
+         patch.object(QueueProcessor, "start") as mock_start:
+        wd._heal_processor_if_needed()
+        mock_start.assert_not_called()
+
+    Singleton._instances.pop(QueueProcessor, None)
+
+
+def test_watchdog_heal_skips_when_processor_already_running(tmp_path: Path) -> None:
+    from streamseeker.api.core.downloader.processor import QueueProcessor
+
+    _seed_queue(
+        tmp_path,
+        [{"file_name": "a.mp4", "status": "pending"}],
+    )
+    Singleton._instances.pop(QueueProcessor, None)
+
+    wd = Watchdog(host="127.0.0.1", port=8765, startup_grace=0.0)
+    with patch.object(QueueProcessor, "is_running", return_value=True), \
+         patch.object(QueueProcessor, "start") as mock_start:
+        wd._heal_processor_if_needed()
+        mock_start.assert_not_called()
+
+    Singleton._instances.pop(QueueProcessor, None)
+
+
+def test_watchdog_heal_disabled_when_flag_off() -> None:
+    wd = Watchdog(
+        host="127.0.0.1", port=8765, startup_grace=0.0, heal_processor=False
+    )
+    assert wd._heal_processor is False

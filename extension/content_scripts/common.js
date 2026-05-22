@@ -504,7 +504,14 @@
 
     let structure;
     try {
-      structure = await api.seriesStructure(options.stream, info.slug);
+      // Pass season/episode from the URL so the daemon's language lookup
+      // hits the actual episode the user is viewing — a series like
+      // "Ascendance of a Bookworm" only gains a German dub from S3
+      // onward, so without these hints the modal would show only the
+      // subtitle tracks visible on S1E1.
+      structure = await api.seriesStructure(
+        options.stream, info.slug, info.season || 0, info.episode || 0,
+      );
     } catch (err) {
       modal.innerHTML = "";
       modal.appendChild(el("h2", { text: title }));

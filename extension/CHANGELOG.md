@@ -7,6 +7,18 @@ required CLI version via the `minCliVersion` key in `manifest.json`.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.30.3] - 2026-05-20
+
+### Fixed
+
+- Der Auswahl-Dialog auf Stream-Seiten zeigt jetzt die Sprachen, die
+  für die *aktuell geöffnete* Episode angeboten werden. Bisher wurde
+  immer das Sprachangebot von Staffel 1 Episode 1 verwendet, sodass
+  z.B. eine deutsche Synchronisation, die erst in einer späteren
+  Staffel hinzukommt, im Dialog gefehlt hat. Funktioniert nur mit
+  einem aktualisierten Daemon. Mit älteren Daemons greift weiter das
+  alte Verhalten (die zusätzlichen Query-Parameter werden ignoriert).
+
 ## [0.30.2] - 2026-05-03
 
 ### Changed

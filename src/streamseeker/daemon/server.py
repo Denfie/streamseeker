@@ -673,10 +673,24 @@ def create_app() -> FastAPI:
     # -----------------------------------------------------------------
 
     @app.get("/series/{stream}/{slug}/structure")
-    def series_structure(stream: str, slug: str) -> dict:
+    def series_structure(
+        stream: str,
+        slug: str,
+        season: int = 0,
+        episode: int = 0,
+    ) -> dict:
         """Return seasons + available languages/providers for the scope
         picker in the browser extension's modal. Mirrors what the CLI
-        wizard collects interactively."""
+        wizard collects interactively.
+
+        ``season`` / ``episode`` are optional hints from the page the user
+        is on. They steer the language/provider lookup so the modal
+        reflects what's actually offered *for that specific episode* — on
+        aniworld a series can start with subtitles-only and pick up a
+        German dub from S3E1 onward, so defaulting to (S1, E1) hides the
+        real choice. Falls back to the first season/episode when the
+        hints are 0 or the lookup for that pair fails.
+        """
         from streamseeker.api.handler import StreamseekerHandler
         handler = StreamseekerHandler()
         try:
@@ -711,14 +725,29 @@ def create_app() -> FastAPI:
             "providers": {},
         }
 
-        # Languages/providers — fetched on the first available (season, episode)
-        # so the user sees what's actually offered by the site.
+        # Languages/providers — prefer the season/episode the caller is
+        # actually viewing, fall back to (first season, episode 1) when no
+        # hint is given or the per-episode lookup returns nothing.
         detail_type = "staffel" if result["seasons"] else ("filme" if result["movies"] else "staffel")
-        detail_season = result["seasons"][0] if result["seasons"] else 1
+        default_season = result["seasons"][0] if result["seasons"] else 1
+        hint_season = season if season > 0 else default_season
+        hint_episode = episode if episode > 0 else 1
         try:
-            details = handler.search_details(stream, slug, detail_type, detail_season, 1) or {}
+            details = handler.search_details(
+                stream, slug, detail_type, hint_season, hint_episode,
+            ) or {}
             result["languages"] = details.get("languages") or {}
             result["providers"] = details.get("providers") or {}
+            # If the hinted episode happens to have no language map (rare
+            # parser miss), retry with the first-episode default so the
+            # modal at least shows the union of providers.
+            if not result["languages"] and (hint_season, hint_episode) != (default_season, 1):
+                fallback = handler.search_details(
+                    stream, slug, detail_type, default_season, 1,
+                ) or {}
+                result["languages"] = fallback.get("languages") or {}
+                if not result["providers"]:
+                    result["providers"] = fallback.get("providers") or {}
         except Exception as exc:
             logger.warning(f"search_details failed for {stream}::{slug}: {exc}")
 
